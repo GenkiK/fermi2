@@ -43,6 +43,18 @@ public:
     }
   }
 
+  void filePrint()
+  {
+    ofstream outputfile("state_list.txt");
+    outputfile << score << " : [";
+    rep(i, size())
+    {
+      outputfile << v[i] << ", ";
+    }
+    outputfile << "\b\b]" << endl;
+    outputfile.close();
+  }
+
   void print()
   {
     cout << score << " : [";
@@ -114,11 +126,12 @@ class Fermi
 {
   set<State> s;
   int lim_score;
+  int n;
 
 public:
-  Fermi(int n)
+  Fermi(int n, int lim_size = 10)
   {
-    init(n);
+    init(n, lim_size);
   }
 
   Fermi()
@@ -131,15 +144,33 @@ public:
     cout << "ε : state" << endl;
     for (auto state : s)
     {
-      state.print();
+      state.filePrint();
+      // state.print();
     }
   }
 
-private:
-  void init(int n)
+  void fileCountPrint()
   {
+    map<int, int> m;
+    for (auto state : s)
+    {
+      m[state.score]++;
+    }
+    ofstream outputfile("state_count" + to_string(n) + ".csv");
+    outputfile << "level,nums" << endl;
+    for (auto ma : m)
+    {
+      outputfile << ma.first << ", " << ma.second << endl;
+    }
+    outputfile.close();
+  }
+
+private:
+  void init(int n, int lim_size = 10)
+  {
+    this->n = n;
     State state(n);
-    lim_score = state.score + 8;
+    lim_score = state.score + lim_size;
     init(state.v);
   }
 
@@ -175,8 +206,12 @@ private:
 
 int main()
 {
-  ios::sync_with_stdio(false);
-  cin.tie(nullptr);
-  Fermi f(3);
-  f.printAll();
+  int n, lim_size;
+  cout << "       n = ";
+  cin >> n;
+  cout << "lim_size = ";
+  cin >> lim_size;
+  Fermi f(n, lim_size);
+  // f.printAll();
+  f.fileCountPrint();
 }
