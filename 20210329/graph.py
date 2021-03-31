@@ -1,19 +1,15 @@
 # %%
 # 初期設定
-import xarray as xr
 import matplotlib.pyplot as plt
-import pyspectra
 import numpy as np
 import csv
 import pandas as pd
 import subprocess
 
-from scipy.stats import poisson
-
 # %%
 # c++実行
 n = 3  # 電子の数[個]
-lim_size = 100  # 最大の総エネルギー[ε]
+lim_size = 100  # 最大の総エネルギー[ε]の個数 [(n-1)!    (n-1)! + lim_size]
 cmd = "./a.out " + str(n) + " " + str(lim_size)
 subprocess.run(cmd.split())
 
