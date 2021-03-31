@@ -12,8 +12,8 @@ from scipy.stats import poisson
 
 # %%
 # c++実行
-n = 3
-lim_size = 100
+n = 3  # 電子の数[個]
+lim_size = 100  # 最大の総エネルギー[ε]
 cmd = "./a.out " + str(n) + " " + str(lim_size)
 subprocess.run(cmd.split())
 
