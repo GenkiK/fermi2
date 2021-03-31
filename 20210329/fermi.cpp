@@ -204,13 +204,21 @@ private:
   }
 };
 
-int main()
+int main(int argc, char **argv)
 {
   int n, lim_size;
-  cout << "       n = ";
-  cin >> n;
-  cout << "lim_size = ";
-  cin >> lim_size;
+  if (argc > 1)
+  {
+    n = atoi(argv[1]);
+    lim_size = atoi(argv[2]);
+  }
+  else
+  {
+    cout << "       n = ";
+    cin >> n;
+    cout << "lim_size = ";
+    cin >> lim_size;
+  }
   Fermi f(n, lim_size);
   // f.printAll();
   f.fileCountPrint();
