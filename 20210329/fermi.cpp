@@ -32,14 +32,14 @@ public:
     }
   }
 
-  State(vector<int> &input)
+  State(vector<int> input)
   {
-    v = input;
-    num = v.size();
+    num = input.size();
     score = 0;
-    rep(i, v.size())
+    v = input;
+    rep(i, num)
     {
-      score += v[i];
+      score += input[i];
     }
   }
 
@@ -105,6 +105,11 @@ bool operator==(const State &a, const State &b)
   return true;
 }
 
+bool operator!=(const State &a, const State &b)
+{
+  return !(a == b);
+}
+
 bool operator<(const State &a, const State &b)
 {
   if (a.score == b.score)
@@ -131,6 +136,7 @@ class Fermi
 public:
   Fermi(int n, int lim_size = 10)
   {
+    //O()
     init(n, lim_size);
   }
 
@@ -165,6 +171,47 @@ public:
     outputfile.close();
   }
 
+  void makePair()
+  {
+    vector<vector<int>> pair(lim_score + 1, vector<int>(lim_score + 1, 0));
+    int num = 0;
+    for (auto a : s)
+    {
+      if (num != a.score)
+      {
+        cout << num << " / " << lim_score << endl;
+        num = a.score;
+      }
+      for (auto b : s)
+      {
+        if (a.score <= b.score)
+        {
+          continue;
+        }
+        if (connected(a, b))
+        {
+          pair[a.score][b.score]++;
+        }
+      }
+    }
+    ofstream outputfile("pair_count" + to_string(n) + ".csv");
+    rep(i, pair.size())
+    {
+      if (i == 0)
+      {
+        rep(j, pair[i].size()) outputfile << j << ",";
+        outputfile << "\b" << endl;
+      }
+      for (auto p : pair[i])
+      {
+        outputfile << p << ", ";
+      }
+      outputfile << "\b\b" << endl;
+    }
+    outputfile.close();
+    return;
+  }
+
 private:
   void init(int n, int lim_size = 10)
   {
@@ -174,7 +221,7 @@ private:
     init(state.v);
   }
 
-  void init(vector<int> v)
+  void init(const vector<int> &v)
   {
     State state(v);
     if (!array_is_unique(v))
@@ -202,6 +249,33 @@ private:
 
     return true;
   }
+
+  bool connected(const State &a, const State &b)
+  {
+    int i = 0, j = 0;
+    int diff = 0;
+    while (i < a.num && j < b.num)
+    {
+      if (a.v[i] == b.v[i])
+      {
+        i++;
+        j++;
+      }
+      else if (a.v[i] < b.v[j])
+      {
+        if (++diff > 1)
+          return false;
+        i++;
+      }
+      else
+      {
+        if (++diff > 1)
+          return false;
+        j++;
+      }
+    }
+    return true;
+  }
 };
 
 int main(int argc, char **argv)
@@ -221,5 +295,6 @@ int main(int argc, char **argv)
   }
   Fermi f(n, lim_size);
   // f.printAll();
-  f.fileCountPrint();
+  f.makePair();
+  // f.fileCountPrint();
 }
