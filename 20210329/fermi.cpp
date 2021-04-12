@@ -171,6 +171,63 @@ public:
     outputfile.close();
   }
 
+  void countPair() // O(準位数 * N * lim_size)
+  {
+    vector<vector<int>> pair(lim_score + 1, vector<int>(lim_score + 1, 0));
+    int num = 0;
+    vector<vector<int>> diff(n - 1, vector<int>(n - 1));
+    bool flag = true;
+    for (auto a : s)
+    {
+      if (num != a.score)
+      {
+        // cout << num << " / " << lim_score << endl;
+        num = a.score;
+      }
+      for (int i = 0; i < n - 1; i++)
+      {
+        for (int j = i + 1; j < n - 1; j++)
+        {
+          diff[i][j] = a.v[j] - a.v[i];
+          if (flag)
+            cout << diff[i][j] << endl;
+        }
+      }
+      flag = false;
+
+      for (int i = 1; i + a.score <= lim_score; i++)
+      {
+        pair[a.score][a.score + i] += n;
+      }
+
+      for (int i = 0; i < n - 1; i++)
+      {
+        for (int j = i + 1; j < n - 1; j++)
+        {
+          if (a.score + diff[i][j] <= lim_score)
+            pair[a.score][a.score + diff[i][j]]--;
+        }
+      }
+    }
+
+    ofstream outputfile("pair_count" + to_string(n) + ".csv");
+    rep(i, pair.size())
+    {
+      if (i == 0)
+      {
+        rep(j, pair[i].size()) outputfile << j << ",";
+        outputfile << "\b" << endl;
+      }
+      for (auto p : pair[i])
+      {
+        outputfile << p << ", ";
+      }
+      outputfile << "\b\b" << endl;
+    }
+    outputfile.close();
+    return;
+  }
+
   void makePair()
   {
     vector<vector<int>> pair(lim_score + 1, vector<int>(lim_score + 1, 0));
@@ -252,6 +309,10 @@ private:
 
   bool connected(const State &a, const State &b)
   {
+    /*
+    024
+    034
+    */
     int i = 0, j = 0;
     int diff = 0;
     while (i < a.num && j < b.num)
@@ -266,12 +327,16 @@ private:
         if (++diff > 1)
           return false;
         i++;
+        if (a.v[i] > b.v[i])
+          j++;
       }
       else
       {
         if (++diff > 1)
           return false;
         j++;
+        if (a.v[i] > b.v[i])
+          j++;
       }
     }
     return true;
@@ -295,6 +360,6 @@ int main(int argc, char **argv)
   }
   Fermi f(n, lim_size);
   // f.printAll();
-  f.makePair();
+  f.countPair();
   // f.fileCountPrint();
 }
