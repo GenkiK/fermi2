@@ -186,7 +186,7 @@ public:
       }
       for (int i = 0; i < n - 1; i++)
       {
-        for (int j = i + 1; j < n - 1; j++)
+        for (int j = i + 1; j < n; j++)
         {
           diff[i][j] = a.v[j] - a.v[i];
           if (flag)
@@ -202,7 +202,7 @@ public:
 
       for (int i = 0; i < n - 1; i++)
       {
-        for (int j = i + 1; j < n - 1; j++)
+        for (int j = i + 1; j < n; j++)
         {
           if (a.score + diff[i][j] <= lim_score)
             pair[a.score][a.score + diff[i][j]]--;

@@ -10,8 +10,8 @@ import os
 
 # %%
 # ファイルが存在しないorデータが足りない場合,c++実行
-n = 3  # 電子の数[個]
-lim_size = 100  # 最大の総エネルギー[ε]の個数 [(n-1)*n / 2,  (n-1)*n / 2 + lim_size]
+n = 8  # 電子の数[個]
+lim_size = 50  # 最大の総エネルギー[ε]の個数 [(n-1)*n / 2,  (n-1)*n / 2 + lim_size]
 
 filename = "./state_count" + str(n) + ".csv"
 if os.path.exists(filename):
