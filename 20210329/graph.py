@@ -10,8 +10,8 @@ import os
 
 # %%
 # ファイルが存在しないorデータが足りない場合,c++実行
-n = 8  # 電子の数[個]
-lim_size = 50  # 最大の総エネルギー[ε]の個数 [(n-1)*n / 2,  (n-1)*n / 2 + lim_size]
+n = 3  # 電子の数[個]
+lim_size = 68  # 最大の総エネルギー[ε]の個数 [(n-1)*n / 2,  (n-1)*n / 2 + lim_size]
 
 filename = "./state_count" + str(n) + ".csv"
 if os.path.exists(filename):
@@ -25,6 +25,13 @@ if os.path.exists(filename):
 # %%
 filename = "./state_count" + str(n) + ".csv"
 csv_input = pd.read_csv(filepath_or_buffer=filename, sep=",")
+c = 0
+for i in range(len(csv_input)):
+    c = c + csv_input.nums[i]
+    if c > 1e4:
+        print(i)
+        break
+
 
 # %%
 plt.plot(csv_input.level, csv_input.nums)

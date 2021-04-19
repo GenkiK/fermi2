@@ -228,6 +228,74 @@ public:
     return;
   }
 
+  void secondPair()
+  {
+    cout << "secondPair" << endl;
+    int lim = lim_score + 1;
+    int num = 0;
+    int pairs[lim][lim][8];
+    vector<string> strs{"+++", "++-", "+-+", "+--", "-++", "-+-", "--+", "---"};
+
+    ofstream outputfile("pair3D_count" + to_string(n) + ".csv");
+    for (auto str : strs)
+      outputfile << str << ",";
+    outputfile << "\n";
+    for (auto ite1 = s.begin(); ite1 != s.end(); ++ite1)
+    {
+      if (num != ite1->score)
+      {
+        rep(i, lim) rep(j, lim) rep(l, 8) pairs[i][j][l] = 0;
+        num = ite1->score;
+        cout << num << " / " << lim << endl;
+      }
+      for (auto ite2 = next(s.end(), -1); ite2 != ite1; --ite2)
+      {
+        if (ite1->score == ite2->score)
+          break;
+        unordered_map<int, int> temp;
+        for (int i = 0; i < n; i++)
+        {
+          temp[ite1->v[i]]++;
+          temp[ite2->v[i]]++;
+        }
+        for (auto ite3 = next(s.end(), -1); ite3 != ite2; --ite3)
+        {
+          if (ite2->score == ite3->score)
+            break;
+          int idx = (int)temp.size() != n + 1 ? 4 : 0;
+          unordered_map<int, int> temp1, temp2;
+          for (int i = 0; i < n; i++)
+          {
+            temp1[ite3->v[i]]++;
+            temp1[ite2->v[i]]++;
+            temp2[ite1->v[i]]++;
+            temp2[ite3->v[i]]++;
+          }
+          idx += (int)temp1.size() != n + 1 ? 2 : 0;
+          idx += (int)temp2.size() != n + 1 ? 1 : 0;
+          pairs[ite2->score][ite3->score][idx]++;
+        }
+      }
+      if (next(ite1, 1) == s.end() || ite1->score != next(ite1, 1)->score)
+      {
+        for (int j = ite1->score + 1; j < lim; j++)
+        {
+          for (int k = j + 1; k < lim; k++)
+          {
+            outputfile << ite1->score << "," << j << "," << k << ",";
+            rep(l, 8)
+            {
+              outputfile << pairs[j][k][l] << ",";
+            }
+            outputfile << "\n";
+          }
+        }
+      }
+    }
+
+    outputfile.close();
+  }
+
   void makePair()
   {
     vector<vector<int>> pair(lim_score + 1, vector<int>(lim_score + 1, 0));
@@ -359,7 +427,7 @@ int main(int argc, char **argv)
     cin >> lim_size;
   }
   Fermi f(n, lim_size);
-  // f.printAll();
-  f.countPair();
+  cout << "aaa" << endl;
+  f.secondPair();
   // f.fileCountPrint();
 }
