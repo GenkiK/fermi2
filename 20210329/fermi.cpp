@@ -16,9 +16,9 @@ typedef pair<int, int> P;
 class State
 {
 public:
-  vector<int> v;
-  int score;
-  int num;
+  vector<int> v; // それぞれの粒子のエネルギー
+  int score;     // 総エネルギー数
+  int num;       // 粒子数
 
   State(int n)
   {
@@ -129,9 +129,9 @@ bool operator>=(const State &t1, const State &t2) { return !(t1 < t2); }
 
 class Fermi
 {
-  set<State> s;
-  int lim_score;
-  int n;
+  set<State> s;  // 各ステートを管理
+  int lim_score; // 総エネルギーの最大値
+  int n;         // 粒子数
 
 public:
   Fermi(int n, int lim_size = 10)
@@ -236,7 +236,7 @@ public:
     int pairs[lim][lim][8];
     vector<string> strs{"+++", "++-", "+-+", "+--", "-++", "-+-", "--+", "---"};
 
-    ofstream outputfile("pair3D_count" + to_string(n) + ".csv");
+    ofstream outputfile("pair3D2_count" + to_string(n) + ".csv");
     for (auto str : strs)
       outputfile << str << ",";
     outputfile << "\n";
@@ -346,6 +346,7 @@ private:
     init(state.v);
   }
 
+  /// 深さ優先探索でステートを列挙
   void init(const vector<int> &v)
   {
     State state(v);
@@ -421,9 +422,9 @@ int main(int argc, char **argv)
   }
   else
   {
-    cout << "       n = ";
+    cout << "粒子数nを入力";
     cin >> n;
-    cout << "lim_size = ";
+    cout << "基底準位からのエネルギーの上がり幅lim_sizeを入力";
     cin >> lim_size;
   }
   Fermi f(n, lim_size);
