@@ -1,14 +1,7 @@
 #include <bits/stdc++.h>
 
-#define SORT(v, n) sort(v, v + n);
-#define VSORT(v) sort(v.begin(), v.end());
 #define size_t unsigned long long
 #define ll long long
-#define rep(i, a) for (int i = 0; i < (int)(a); i++)
-#define repr(i, a) for (int i = (int)(a)-1; i >= 0; i--)
-#define FOR(i, a, b) for (int i = (a); i < (b); i++)
-#define FORR(i, a, b) for (int i = (int)(b)-1; i >= a; i--)
-#define ALL(a) a.begin(), a.end()
 using namespace std;
 
 typedef pair<int, int> P;
@@ -25,7 +18,7 @@ public:
     v = vector<int>(n);
     score = 0;
     num = n;
-    rep(i, n)
+    for (int i = 0; i < n; i++)
     {
       v[i] = i;
       score += i;
@@ -37,7 +30,7 @@ public:
     num = input.size();
     score = 0;
     v = input;
-    rep(i, num)
+    for (int i = 0; i < num; i++)
     {
       score += input[i];
     }
@@ -47,7 +40,7 @@ public:
   {
     ofstream outputfile("state_list.txt");
     outputfile << score << " : [";
-    rep(i, size())
+    for (int i = 0; i < size(); i++)
     {
       outputfile << v[i] << ", ";
     }
@@ -58,7 +51,7 @@ public:
   void print()
   {
     cout << score << " : [";
-    rep(i, size())
+    for (int i = 0; i < size(); i++)
     {
       cout << v[i] << ", ";
     }
@@ -97,7 +90,7 @@ bool operator==(const State &a, const State &b)
 {
   if (b.v.size() != a.v.size())
     return false;
-  rep(i, b.v.size())
+  for (int i = 0; i < b.v.size(); i++)
   {
     if (b.v[i] != a.v[i])
       return false;
@@ -114,7 +107,7 @@ bool operator<(const State &a, const State &b)
 {
   if (a.score == b.score)
   {
-    rep(i, b.v.size())
+    for (int i = 0; i < b.v.size(); i++)
     {
       if (a.v[i] != b.v[i])
         return (a.v[i] < b.v[i]);
@@ -181,7 +174,6 @@ public:
     {
       if (num != a.score)
       {
-        // cout << num << " / " << lim_score << endl;
         num = a.score;
       }
       for (int i = 0; i < n - 1; i++)
@@ -211,11 +203,12 @@ public:
     }
 
     ofstream outputfile("pair_count" + to_string(n) + ".csv");
-    rep(i, pair.size())
+    for (int i = 0; i < pair.size(); i++)
     {
       if (i == 0)
       {
-        rep(j, pair[i].size()) outputfile << j << ",";
+        for (int j = 0; j < pair[i].size(); j++)
+          outputfile << j << ",";
         outputfile << "\b" << endl;
       }
       for (auto p : pair[i])
@@ -244,61 +237,70 @@ public:
     {
       if (num != ite1->score)
       {
-        rep(i, lim) rep(j, lim) rep(l, 8) pairs[i][j][l] = 0;
-        num = ite1->score;
-        cout << num << " / " << lim << endl;
-      }
-      for (auto ite2 = next(s.end(), -1); ite2 != ite1; --ite2)
-      {
-        if (ite1->score == ite2->score)
-          break;
-        unordered_map<int, int> temp;
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < lim; i++)
         {
-          temp[ite1->v[i]]++;
-          temp[ite2->v[i]]++;
+          for (int j = 0; j < lim; j++)
+          {
+            for (int l = 0; l < 8; l++)
+            {
+              pairs[i][j][l] = 0;
+            }
+          }
+          num = ite1->score;
+          cout << num << " / " << lim << endl;
         }
-        for (auto ite3 = next(s.end(), -1); ite3 != ite2; --ite3)
+        for (auto ite2 = next(s.end(), -1); ite2 != ite1; --ite2)
         {
-          if (ite2->score == ite3->score)
+          if (ite1->score == ite2->score)
             break;
-          int idx = (int)temp.size() != n + 1 ? 4 : 0;
-          unordered_map<int, int> temp1, temp2;
+          unordered_map<int, int> temp;
           for (int i = 0; i < n; i++)
           {
-            temp1[ite3->v[i]]++;
-            temp1[ite2->v[i]]++;
-            temp2[ite1->v[i]]++;
-            temp2[ite3->v[i]]++;
+            temp[ite1->v[i]]++;
+            temp[ite2->v[i]]++;
           }
-          idx += (int)temp1.size() != n + 1 ? 2 : 0;
-          idx += (int)temp2.size() != n + 1 ? 1 : 0;
-          pairs[ite2->score][ite3->score][idx]++;
-        }
-      }
-      if (next(ite1, 1) == s.end() || ite1->score != next(ite1, 1)->score)
-      {
-        for (int j = ite1->score + 1; j < lim; j++)
-        {
-          for (int k = j + 1; k < lim; k++)
+          for (auto ite3 = next(s.end(), -1); ite3 != ite2; --ite3)
           {
-            outputfile << ite1->score << "," << j << "," << k << ",";
-            rep(l, 8)
+            if (ite2->score == ite3->score)
+              break;
+            int idx = (int)temp.size() != n + 1 ? 4 : 0;
+            unordered_map<int, int> temp1, temp2;
+            for (int i = 0; i < n; i++)
             {
-              outputfile << pairs[j][k][l] << ",";
+              temp1[ite3->v[i]]++;
+              temp1[ite2->v[i]]++;
+              temp2[ite1->v[i]]++;
+              temp2[ite3->v[i]]++;
             }
-            outputfile << "\n";
+            idx += (int)temp1.size() != n + 1 ? 2 : 0;
+            idx += (int)temp2.size() != n + 1 ? 1 : 0;
+            pairs[ite2->score][ite3->score][idx]++;
+          }
+        }
+        if (next(ite1, 1) == s.end() || ite1->score != next(ite1, 1)->score)
+        {
+          for (int j = ite1->score + 1; j < lim; j++)
+          {
+            for (int k = j + 1; k < lim; k++)
+            {
+              outputfile << ite1->score << "," << j << "," << k << ",";
+              for (int l = 0; l < 8; l++)
+              {
+                outputfile << pairs[j][k][l] << ",";
+              }
+              outputfile << "\n";
+            }
           }
         }
       }
-    }
 
-    outputfile.close();
+      outputfile.close();
+    }
   }
 
   void makePair()
   {
-    vector<vector<int>> pair(lim_score + 1, vector<int>(lim_score + 1, 0));
+    vector<vector<int>> pairVec(lim_score + 1, vector<int>(lim_score + 1, 0));
     int num = 0;
     for (auto a : s)
     {
@@ -315,19 +317,20 @@ public:
         }
         if (connected(a, b))
         {
-          pair[a.score][b.score]++;
+          pairVec[a.score][b.score]++;
         }
       }
     }
-    ofstream outputfile("pair_count" + to_string(n) + ".csv");
-    rep(i, pair.size())
+    ofstream outputfile("pairVec_count" + to_string(n) + ".csv");
+    for (int i = 0; i < pairVec.size(); i++)
     {
       if (i == 0)
       {
-        rep(j, pair[i].size()) outputfile << j << ",";
+        for (int j = 0; j < pairVec[i].size(); j++)
+          outputfile << j << ",";
         outputfile << "\b" << endl;
       }
-      for (auto p : pair[i])
+      for (auto p : pairVec[i])
       {
         outputfile << p << ", ";
       }
@@ -356,7 +359,7 @@ private:
       return;
     if (s.emplace(state).second)
     {
-      rep(i, state.size())
+      for (int i = 0; i < state.size(); i++)
       {
         state.increment(i);
         init(state.v);
@@ -367,7 +370,7 @@ private:
 
   bool array_is_unique(const vector<int> &v)
   {
-    rep(i, v.size() - 1)
+    for (int i = 0; i < v.size() - 1; i++)
     {
       if (v[i] == v[i + 1])
         return false;
@@ -422,9 +425,9 @@ int main(int argc, char **argv)
   }
   else
   {
-    cout << "粒子数nを入力";
+    cout << "粒子数nを入力" << endl;
     cin >> n;
-    cout << "基底準位からのエネルギーの上がり幅lim_sizeを入力";
+    cout << "基底準位からのエネルギーの上がり幅lim_sizeを入力" << endl;
     cin >> lim_size;
   }
   Fermi f(n, lim_size);
