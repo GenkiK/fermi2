@@ -229,7 +229,8 @@ public:
     int pairs[lim][lim][8];
     vector<string> strs{"+++", "++-", "+-+", "+--", "-++", "-+-", "--+", "---"};
 
-    ofstream outputfile("pair3D2_count" + to_string(n) + ".csv");
+    // TODO: outputディレクトリを存在しなければ作るような関数を実装する。
+    ofstream outputfile("output/pair3D2_count" + to_string(n) + ".csv");
     for (auto str : strs)
       outputfile << str << ",";
     outputfile << "\n";
