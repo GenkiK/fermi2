@@ -38,7 +38,7 @@ public:
 
   void filePrint()
   {
-    ofstream outputfile("state_list.txt");
+    ofstream outputfile("output/state_list.txt");
     outputfile << score << " : [";
     for (int i = 0; i < size(); i++)
     {
@@ -155,7 +155,7 @@ public:
     {
       m[state.score]++;
     }
-    ofstream outputfile("state_count" + to_string(n) + ".csv");
+    ofstream outputfile("output/state_count" + to_string(n) + ".csv");
     outputfile << "level,nums" << endl;
     for (auto ma : m)
     {
@@ -202,7 +202,7 @@ public:
       }
     }
 
-    ofstream outputfile("pair_count" + to_string(n) + ".csv");
+    ofstream outputfile("output/pair_count" + to_string(n) + ".csv");
     for (int i = 0; i < pair.size(); i++)
     {
       if (i == 0)
@@ -322,7 +322,7 @@ public:
         }
       }
     }
-    ofstream outputfile("pairVec_count" + to_string(n) + ".csv");
+    ofstream outputfile("output/pairVec_count" + to_string(n) + ".csv");
     for (int i = 0; i < pairVec.size(); i++)
     {
       if (i == 0)
