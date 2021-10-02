@@ -11,7 +11,7 @@ class State
 public:
   vector<int> v; // それぞれの粒子のエネルギー
   int score;     // 総エネルギー数
-  int num;       // 粒子数
+  int num;       // 電子の数
 
   State(int n)
   {
@@ -36,21 +36,22 @@ public:
     }
   }
 
-  void filePrint()
-  {
-    ofstream outputfile("output/state_list.txt");
-    outputfile << score << " : [";
-    for (int i = 0; i < size(); i++)
-    {
-      outputfile << v[i] << ", ";
-    }
-    outputfile << "\b\b]" << endl;
-    outputfile.close();
-  }
+  // Refactor as exportStateList() in Fermi class.
+  // void filePrint()
+  // {
+  //   ofstream outputfile("output/state_list.txt");
+  //   outputfile << score << "ε: [";
+  //   for (int i = 0; i < size(); i++)
+  //   {
+  //     outputfile << v[i] << ", ";
+  //   }
+  //   outputfile << "]\n" << endl;
+  //   outputfile.close();
+  // }
 
   void print()
   {
-    cout << score << " : [";
+    cout << score << "ε: [";
     for (int i = 0; i < size(); i++)
     {
       cout << v[i] << ", ";
@@ -124,7 +125,7 @@ class Fermi
 {
   set<State> s;  // 各ステートを管理
   int lim_score; // 総エネルギーの最大値
-  int n;         // 粒子数
+  int n;         // 電子の数
 
 public:
   Fermi(int n, int lim_size = 10)
@@ -138,17 +139,68 @@ public:
     init(3);
   }
 
-  void printAll()
+  void printStates()  // 旧printAll()
   {
     cout << "ε : state" << endl;
     for (auto state : s)
     {
-      state.filePrint();
-      // state.print();
+      // state.filePrint();
+      state.print();
     }
   }
 
-  void fileCountPrint()
+  void exportStatesTxt()
+  /**
+   * Stateの一覧を、"score ε: [v[0], v[1],...]" という形で、txt形式として出力する関数
+  */
+  {
+    cout << "ε : state" << endl;
+    ofstream outputfile("output/state_list" + to_string(n) + ".txt");
+    for (auto state : s)
+    {
+      outputfile << state.score << "ε: [";
+      for (int i = 0; i < state.size(); i++)
+      {
+        outputfile << state.v[i];
+        if (i == state.size()-1) outputfile << "]" << endl;
+        else outputfile << ", ";
+      }
+    }
+    outputfile.close();
+  }
+
+  void exportStatesCsv()
+  /**
+   * Stateの一覧を、"score, v[0], v[1], ..., v[n-1]" という形で、cSV形式として出力する関数
+   */
+  {
+    cout << "score, v[0], v[1], ..., v[n-1]" << endl;
+    ofstream outputfile("output/states" + to_string(n) + ".csv");
+    // header
+    outputfile << "score";
+    for (int i = 0; i < n; i++)
+    {
+      outputfile << ", v[" << to_string(i) << "]";
+    }
+    outputfile << endl;
+
+    for (auto state : s)
+    {
+      outputfile << state.score << ", ";
+      for (int i = 0; i < state.size(); i++)
+      {
+        outputfile << state.v[i];
+        if (i == state.size()-1) outputfile << endl;
+        else outputfile << ", ";
+      }
+    }
+    outputfile.close();
+  }
+
+  void exportStateCount()  // 旧fileCountPrint()
+  /**
+   * 同じ総エネルギー数(score)をもつStateの数を、csv形式で出力する関数
+  */
   {
     map<int, int> m;
     for (auto state : s)
@@ -156,7 +208,7 @@ public:
       m[state.score]++;
     }
     ofstream outputfile("output/state_count" + to_string(n) + ".csv");
-    outputfile << "level,nums" << endl;
+    outputfile << "score, nums" << endl;
     for (auto ma : m)
     {
       outputfile << ma.first << ", " << ma.second << endl;
@@ -167,37 +219,32 @@ public:
   void countPair() // O(準位数 * N * lim_size)
   {
     vector<vector<int>> pair(lim_score + 1, vector<int>(lim_score + 1, 0));
-    int num = 0;
     vector<vector<int>> diff(n - 1, vector<int>(n - 1));
-    bool flag = true;
-    for (auto a : s)
+    for (auto state : s)
     {
-      if (num != a.score)
-      {
-        num = a.score;
-      }
+      cout << "state.v: [";
+      for (auto state_i : state.v) cout << state_i << ", ";
+      cout << "]" << endl;
       for (int i = 0; i < n - 1; i++)
       {
         for (int j = i + 1; j < n; j++)
         {
-          diff[i][j] = a.v[j] - a.v[i];
-          if (flag)
-            cout << diff[i][j] << endl;
+          diff[i][j] = state.v[j] - state.v[i];  // 各Stateごとにdiffは初期化される
         }
       }
-      flag = false;
 
-      for (int i = 1; i + a.score <= lim_score; i++)
+      // いま考えているStateのスコア(state.score)から別のスコア(state.score+k)をもつStateに遷移するパターン数は電子をn個のうちいずれかを遷移させるので、遷移可能なのは最大nパターン。(ここではstate.score + k よりも大きい配置に遷移することも含めて考えてる)
+      for (int k = 1; k + state.score <= lim_score; k++)
       {
-        pair[a.score][a.score + i] += n;
+        pair[state.score][state.score + k] += n;
       }
 
       for (int i = 0; i < n - 1; i++)
       {
         for (int j = i + 1; j < n; j++)
         {
-          if (a.score + diff[i][j] <= lim_score)
-            pair[a.score][a.score + diff[i][j]]--;
+          if (state.score + diff[i][j] <= lim_score)
+            pair[state.score][state.score + diff[i][j]]--;
         }
       }
     }
@@ -205,17 +252,22 @@ public:
     ofstream outputfile("output/pair_count" + to_string(n) + ".csv");
     for (int i = 0; i < pair.size(); i++)
     {
+      // ヘッダー
       if (i == 0)
       {
         for (int j = 0; j < pair[i].size(); j++)
-          outputfile << j << ",";
-        outputfile << "\b" << endl;
+        {
+          outputfile << j;
+          if (j == pair[i].size()-1) outputfile << endl;
+          else outputfile << ",";
+        }
       }
-      for (auto p : pair[i])
+      for (int j = 0; j < pair[i].size(); j++)
       {
-        outputfile << p << ", ";
+        outputfile << pair[i][j];
+        if (j == pair[i].size()-1) outputfile << endl;
+        else outputfile << ",";
       }
-      outputfile << "\b\b" << endl;
     }
     outputfile.close();
     return;
@@ -316,7 +368,7 @@ public:
         {
           continue;
         }
-        if (connected(a, b))
+        if (is_connected(a, b))
         {
           pairVec[a.score][b.score]++;
         }
@@ -325,17 +377,25 @@ public:
     ofstream outputfile("output/pairVec_count" + to_string(n) + ".csv");
     for (int i = 0; i < pairVec.size(); i++)
     {
-      if (i == 0)
-      {
+      // ヘッダー
+      if (i == 0) {
         for (int j = 0; j < pairVec[i].size(); j++)
-          outputfile << j << ",";
-        outputfile << "\b" << endl;
+        {
+          outputfile << j;
+          if (j == pairVec[i].size() - 1)
+            outputfile << endl;
+          else
+            outputfile << ",";
+        }
       }
-      for (auto p : pairVec[i])
+      for (int j = 0; j < pairVec[i].size(); j++)
       {
-        outputfile << p << ", ";
+        outputfile << pairVec[i][j];
+        if (j == pairVec[i].size() - 1)
+          outputfile << endl;
+        else
+          outputfile << ",";
       }
-      outputfile << "\b\b" << endl;
     }
     outputfile.close();
     return;
@@ -380,7 +440,7 @@ private:
     return true;
   }
 
-  bool connected(const State &a, const State &b)
+  bool is_connected(const State &a, const State &b)
   {
     /*
     024
@@ -432,7 +492,10 @@ int main(int argc, char **argv)
     cin >> lim_size;
   }
   Fermi f(n, lim_size);
-  cout << "aaa" << endl;
-  f.secondPair();
-  // f.fileCountPrint();
+  cout << endl;
+  // f.secondPair();
+  // f.exportStateList();
+  // f.countPair();
+  // f.makePair();
+  f.exportStatesCsv();
 }
