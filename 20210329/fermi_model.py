@@ -7,12 +7,15 @@ from tqdm.notebook import tqdm
 
 
 class State(object):
+    n = None
+
     def __init__(self, v: list[np.int64], score: np.int64):
         self.v = v
         self.score = score
 
     def __repr__(self) -> str:
-        return str(self.score) + "ε: " + str(self.v)
+        # return str(self.score) + "ε: " + str(self.v)
+        return f"State({self.score}ε: {self.v})"
 
     def __eq__(self, state: State) -> bool:
         return self.score == state.score
@@ -88,7 +91,7 @@ class Fermi(object):
         """
         隣接行列を求めて表示する
         """
-        self.make_adj(sym=True)
+        self.make_adj_matrix(sym=True)
         plt.figure(figsize=figsize)
         plt.pcolormesh(self.adj, cmap="copper")
         plt.ylim(self.adj.shape[0] - 1, 0)
@@ -126,7 +129,7 @@ class Fermi(object):
         F = self.deexcitation
         coeff = C_ - F - C.T + F_
         if not self.equ:
-            A_ = np.diag(Fermi.sum_along_axis(self.emission, 0))
+            A_ = np.diag(sum_along_axis(self.emission, 0))
             A = self.emission
             coeff += A_ - A
         self.coeff = coeff
@@ -184,6 +187,7 @@ class Fermi(object):
             else:
                 dct[state.score] += rate
                 degeneracy += 1
+        dct[self.states[-1].score] /= degeneracy
         scores = np.fromiter(dct.keys(), dtype=int)
         mean_distribution = np.fromiter(dct.values(), dtype=float)
         return scores, mean_distribution
@@ -195,9 +199,10 @@ def csv_to_states(path: str = "./output/states3.csv") -> list[State]:
     """
     data = pd.read_csv(path, header=0).values
     scores = data[:, 0]
-    array = data[:, 1:]
-    size = array.shape[0]
-    return [State(array[i], scores[i]) for i in range(size)]
+    configurations = data[:, 1:]
+    # 電子数の設定
+    State.n = len(configurations[0])
+    return [State(config, score) for config, score in zip(configurations, scores)]
 
 
 # 使わない
@@ -235,11 +240,11 @@ def plots_dist(
     if include_equ:
         fermi = Fermi(states3, equ=True, Te=Te, ne=1e19)
         scores, population = fermi.get_distribution(use_power)
-        plt.plot(scores, population, label="equilibrium", marker=".")
+        plt.plot(scores, population, label="equilibrium", marker=".", linewidth=0.8, ms=3)
     for ne in tqdm(ne_lst):
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
         scores, population = fermi.get_distribution(use_power)
-        plt.plot(scores, population, label=f"ne = {ne}", marker=".")
+        plt.plot(scores, population, label=f"ne = {ne}", marker=".", linewidth=0.8, ms=3)
     plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
     plt.title(f"distribution (T_e = {Te})")
     plt.yscale(yscale)
@@ -269,11 +274,11 @@ def plots_mean_dist(
     if include_equ:
         fermi = Fermi(states3, equ=True, Te=Te, ne=1e19)
         scores, population = fermi.get_mean_distribution(use_power)
-        plt.plot(scores, population, label="equilibrium", marker=".")
+        plt.plot(scores, population, label="equilibrium", marker=".", linewidth=0.8, ms=3)
     for ne in tqdm(ne_lst):
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
         scores, population = fermi.get_mean_distribution(use_power)
-        plt.plot(scores, population, label=f"ne = {ne}", marker=".")
+        plt.plot(scores, population, label=f"ne = {ne}", marker=".", linewidth=0.8, ms=3)
     plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
     plt.title(f"mean distribution (T_e = {Te})")
     plt.yscale(yscale)
@@ -303,11 +308,11 @@ def plots_poplulation(
     if include_equ:
         fermi = Fermi(states3, equ=True, Te=Te, ne=1e19)
         scores, population = fermi.get_population(use_power)
-        plt.scatter(scores, population, label="equilibrium")
+        plt.scatter(scores, population, label="equilibrium", s=2)
     for ne in tqdm(ne_lst):
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
         scores, population = fermi.get_population(use_power)
-        plt.scatter(scores, population, label=f"ne = {ne}")
+        plt.scatter(scores, population, label=f"ne = {ne}", s=2)
     plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
     plt.title(f"population (T_e = {Te})")
     plt.yscale(yscale)
