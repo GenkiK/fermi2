@@ -5,6 +5,10 @@ from numpy.typing import NDArray
 import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
 
+plt.rcParams["mathtext.fontset"] = "stix"
+plt.rcParams["font.family"] = "Noto Sans CJK JP"
+plt.rcParams["font.size"] = 12
+
 
 class State(object):
     n = None
@@ -112,9 +116,42 @@ class Fermi(object):
                         # j→iの遷移
                         self.emission[i, j] = (self.states[j].score - self.states[i].score) ** 3
 
-    def _solve_equation(self, use_power: bool = False) -> NDArray[np.float64]:
+    # def _solve_equation(self, use_power: bool = True) -> NDArray[np.float64]:
+    #     """
+    #     Xn = 0 の連立方程式を固有値問題とみなし、ペロン=フロベニウスの定理を利用して解を求める
+    #     """
+
+    #     # ndarray.sum(axis=0)では誤差が出てしまうので、その代用
+    #     def sum_along_axis(matrix: NDArray[np.float64], axis: int = 0):
+    #         return np.apply_along_axis(np.sum, axis, matrix)
+
+    #     if np.all(self.excitation == 0):
+    #         self._make_matrices()
+    #     C_ = np.diag(sum_along_axis(self.excitation, 1))
+    #     F_ = np.diag(sum_along_axis(self.deexcitation, 0))
+    #     C = self.excitation
+    #     F = self.deexcitation
+    #     coeff = C_ - F - C.T + F_
+    #     if not self.equ:
+    #         A_ = np.diag(sum_along_axis(self.emission, 0))
+    #         A = self.emission
+    #         coeff += A_ - A
+    #     self.coeff = coeff
+
+    #     # 対角成分の最大値で正規化し、正負を反転させることで、対角行列のみ負の行列を作成。さらにそこに単位行列を足すことで正行列を作成。
+    #     # ペロン=フロベニウスの定理を用いて、最大の固有値1に対応する固有ベクトルはすべて正の成分を持つことになる。
+    #     normalized = -coeff / np.max(np.abs(np.diag(coeff))) + np.eye(C.shape[0])
+    #     if use_power:
+    #         x = Fermi.power_method(normalized)
+    #     else:
+    #         eigs, xs = np.linalg.eig(normalized)
+    #         x = np.abs(xs[:, np.argmax(eigs)])
+    #     return x / np.sum(x)
+
+    def _solve_equation(self, use_power: bool = True) -> NDArray[np.float64]:
         """
-        Xn = 0 の連立方程式を固有値問題とみなし、ペロン=フロベニウスの定理を利用して解を求める
+        Xn = 0 の連立方程式を固有値問題とみなし、ペロン=フロベニウスの定理を利用して解を求める。
+        事前に係数行列Xを対角成分の最大値で正規化するのではなく、それに足し合わせる単位行列にXの対角成分の最大値をかけることにより、正規化した行列の要素のオーダーが非常に小さくなることを防止し、計算誤差を軽減
         """
 
         # ndarray.sum(axis=0)では誤差が出てしまうので、その代用
@@ -134,17 +171,17 @@ class Fermi(object):
             coeff += A_ - A
         self.coeff = coeff
 
-        # 対角成分の最大値で正規化し、正負を反転させることで、対角行列のみ負の行列を作成。さらにそこに単位行列を足すことで正行列を作成。
-        # ペロン=フロベニウスの定理を用いて、最大の固有値1に対応する固有ベクトルはすべて正の成分を持つことになる。
-        normalized = -coeff / np.max(np.abs(np.diag(coeff))) + np.eye(C.shape[0])
+        # Xの正負を反転させ、対角行列のみ負の行列を作成。そこにXの対角成分の最大値 σ をかけた単位行列を足すことで非負行列を作成
+        # ペロン=フロベニウスの定理を用いて、最大の固有値 σ に対応する固有ベクトルはすべて正の成分を持つことになる。
+        non_negative_matrix = -coeff + np.max(np.abs(np.diag(coeff))) * np.eye(C.shape[0])
         if use_power:
-            x = Fermi.power_method(normalized)
+            x = Fermi.power_method(non_negative_matrix)
         else:
-            eigs, xs = np.linalg.eig(normalized)
+            eigs, xs = np.linalg.eig(non_negative_matrix)
             x = np.abs(xs[:, np.argmax(eigs)])
         return x / np.sum(x)
 
-    def get_distribution(self, use_power: bool = False) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
+    def get_distribution(self, use_power: bool = True) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
         """
         scoreに対する、縮退状態について和をとった確率密度分布を計算する
         """
@@ -159,7 +196,7 @@ class Fermi(object):
         distribution = np.fromiter(dct.values(), dtype=float)
         return scores, distribution
 
-    def get_population(self, use_power: bool = False) -> tuple[list[int], NDArray[np.float64]]:
+    def get_population(self, use_power: bool = True) -> tuple[list[int], NDArray[np.float64]]:
         """
         「縮退状態を分けて考えた状態」ごとのscoreに対する存在割合を計算する。
         """
@@ -167,7 +204,7 @@ class Fermi(object):
         scores = [state.score for state in self.states]
         return scores, population
 
-    def get_mean_distribution(self, use_power: bool = False) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
+    def get_mean_distribution(self, use_power: bool = True) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
         """
         scoreに対する、縮退状態について和をとり、縮退度で平均した確率密度分布を計算する
         """
@@ -225,11 +262,12 @@ def plots_dist(
     ne_lst: list[float],
     Te: float = 0.5,
     include_equ: bool = False,
-    use_power: bool = False,
+    use_power: bool = True,
     xlim: tuple[float] = None,
     ylim: tuple[float] = None,
     yscale: str = "log",
     figsize: tuple[float] = None,
+    labelsize: int = None,
 ) -> None:
     """
     各neの値におけるフェルミガスモデルを構築し、総エネルギーを横軸にとり、縮退状態について和をとった占有密度を縦軸logスケールでプロットする
@@ -244,12 +282,13 @@ def plots_dist(
     for ne in tqdm(ne_lst):
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
         scores, population = fermi.get_distribution(use_power)
-        plt.plot(scores, population, label=f"ne = {ne}", marker=".", linewidth=0.8, ms=3)
-    plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
-    plt.title(f"distribution (T_e = {Te})")
+        plt.plot(scores, population, label=fr"$n_e$ = {ne}", marker=".", linewidth=0.8, ms=3)
+    # plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0)
+    plt.legend(loc="lower left", fontsize=labelsize)
+    plt.title(fr"distribution ($T_e$ = {Te})")
     plt.yscale(yscale)
-    plt.xlabel("E (total energy) [ε]")
-    plt.ylabel("P(E) (log scale)")
+    plt.xlabel(r"$E (total energy) [\epsilon]$")
+    plt.ylabel(r"$P(E)$  ($\log$ scale)")
     plt.xlim(xlim)
     plt.ylim(ylim)
     plt.show()
@@ -259,31 +298,71 @@ def plots_mean_dist(
     ne_lst: list[float],
     Te: float = 0.5,
     include_equ: bool = False,
-    use_power: bool = False,
+    use_power: bool = True,
     xlim: tuple[float] = None,
     ylim: tuple[float] = None,
-    yscale: str = "log",
     figsize: tuple[float] = None,
+    labelsize: int = None,
+    titlesize: int = None,
 ) -> None:
     """
     各neの値におけるフェルミガスモデルを構築し、総エネルギーを横軸、縮退状態について和をとり縮退度で平均した占有密度を縦軸logスケールでプロットする
     """
     states3 = csv_to_states()
+    scores = None
+    if figsize is not None:
+        plt.figure(figsize=figsize)
+    if include_equ:
+        ne = 1e20
+        fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
+        scores, distribution = fermi.get_mean_distribution(use_power)
+        plt.plot(scores, distribution, label=fr"$n_e$={ne} (equilibrium)", marker=".", linewidth=1, ms=4)
+    for ne in tqdm(ne_lst):
+        fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
+        scores, distribution = fermi.get_mean_distribution(use_power)
+        plt.plot(scores, distribution, label=fr"$n_e$={ne}", marker=".", linewidth=1, ms=4)
+    # plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0, fontsize=labelsize)
+    plt.legend(loc="lower left", fontsize=labelsize)
+    plt.xticks(scores)
+    plt.title(fr"縮退度で平均した占有密度分布 ($T_e$ = {Te})", fontsize=titlesize)
+    plt.yscale("log")
+    plt.xlabel(r"エネルギー準位 $E$ $[\epsilon]$", fontsize=labelsize)
+    plt.ylabel(r"$P(E)$/縮退度  ($\log$ scale)", fontsize=labelsize)
+    plt.xlim(xlim)
+    plt.ylim(ylim)
+    plt.show()
+
+
+def plots_mean_dist_compare(
+    ne_lst: list[float],
+    Te: float = 0.5,
+    include_equ: bool = False,
+    use_power: bool = True,
+    xlim: tuple[float] = None,
+    ylim: tuple[float] = None,
+    figsize: tuple[float] = None,
+) -> None:
+    states3 = csv_to_states()
     if figsize is not None:
         plt.figure(figsize=figsize)
     if include_equ:
         fermi = Fermi(states3, equ=True, Te=Te, ne=1e19)
-        scores, population = fermi.get_mean_distribution(use_power)
-        plt.plot(scores, population, label="equilibrium", marker=".", linewidth=0.8, ms=3)
+        scores, distribution = fermi.get_mean_distribution(use_power)
+        scores_normalized, distribution_normalized = fermi.get_mean_distribution(use_power)
+        plt.plot(scores, distribution, label="equilibrium", marker=".", linewidth=0.8, ms=3)
+        plt.plot(scores_normalized, distribution_normalized, label="equilibrium (normalized)", marker=".", linewidth=0.8, ms=3)
     for ne in tqdm(ne_lst):
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
-        scores, population = fermi.get_mean_distribution(use_power)
-        plt.plot(scores, population, label=f"ne = {ne}", marker=".", linewidth=0.8, ms=3)
-    plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
-    plt.title(f"mean distribution (T_e = {Te})")
-    plt.yscale(yscale)
-    plt.xlabel("E (total energy) [ε]")
-    plt.ylabel("P(E)/ρ(E) (log scale)")
+        scores, distribution = fermi.get_mean_distribution(use_power)
+        scores_normalized, distribution_normalized = fermi.get_mean_distribution(use_power)
+        plt.plot(scores, distribution, label=fr"$n_e$ = {ne}", marker=".", linewidth=0.8, ms=3)
+        plt.plot(scores_normalized, distribution_normalized, label=fr"$n_e$ = {ne} (normalized)", marker=".", linewidth=0.8, ms=3)
+    # plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0)
+    plt.legend(loc="lower left")
+    plt.title(fr"mean distribution for comparing($T_e$ = {Te})")
+    plt.yscale("log")
+    plt.xlabel(r"$E [\epsilon]$")
+    plt.ylabel(r"$P(E)/\rho(E)$  ($\log$ scale)")
     plt.xlim(xlim)
     plt.ylim(ylim)
     plt.show()
@@ -293,31 +372,41 @@ def plots_poplulation(
     ne_lst: list[float],
     Te: float = 0.5,
     include_equ: bool = False,
-    use_power: bool = False,
+    use_power: bool = True,
     xlim: tuple[float] = None,
     ylim: tuple[float] = None,
-    yscale: str = "log",
     figsize: tuple[float] = None,
+    labelsize: int = None,
+    titlesize: int = None,
 ) -> None:
     """
     各neの値におけるフェルミガスモデルを構築し、総エネルギーを横軸にとり、縮退状態を別々で考えた各状態の占有密度を縦軸logスケールでプロットする
     """
+    scores = None
     states3 = csv_to_states()
     if figsize is not None:
         plt.figure(figsize=figsize)
     if include_equ:
-        fermi = Fermi(states3, equ=True, Te=Te, ne=1e19)
+        ne = 1e20
+        fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
         scores, population = fermi.get_population(use_power)
-        plt.scatter(scores, population, label="equilibrium", s=2)
+        plt.scatter(scores, population, label=fr"$n_e$={ne} (equilibrium)", s=2, alpha=1.0)
     for ne in tqdm(ne_lst):
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
         scores, population = fermi.get_population(use_power)
-        plt.scatter(scores, population, label=f"ne = {ne}", s=2)
-    plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0)
-    plt.title(f"population (T_e = {Te})")
-    plt.yscale(yscale)
-    plt.xlabel("E (total energy) [ε]")
-    plt.ylabel("population [%] (log scale)")
+        plt.scatter(scores, population, label=fr"$n_e$={ne}", s=2, alpha=1.0)
+    # plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0, fontsize=labelsize)
+    lgnd = plt.legend(loc="lower left", fontsize=labelsize)
+    lgnd.legendHandles[0].set_sizes([9.0])
+    lgnd.legendHandles[1].set_sizes([9.0])
+    # plt.title(fr"population ($T_e$ = {Te})", fontsize=titlesize)
+    plt.title(fr"占有密度分布 ($T_e$ = {Te})", fontsize=titlesize)
+    plt.yscale("log")
+    # plt.ylabel("population [%] (log scale)")
+    plt.xlabel(r"状態 $i$ のエネルギー準位 $E_i$ $[\epsilon]$", fontsize=labelsize)
+    plt.ylabel(r"$P(E_i)$  ($\log$ scale)", fontsize=labelsize)
     plt.xlim(xlim)
     plt.ylim(ylim)
+    scores_ordered_set = sorted([*set(scores)])
+    plt.xticks(scores_ordered_set)
     plt.show()
