@@ -4,6 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
+import os
 
 plt.rcParams["mathtext.fontset"] = "stix"
 plt.rcParams["font.family"] = "Noto Sans CJK JP"
@@ -41,7 +42,7 @@ class State(object):
 
 
 class Fermi(object):
-    def __init__(self, states: list[State], equ: bool = True, Te: float = 0.5, ne: float = 1e19):
+    def __init__(self, states: list[State], equ: bool = True, Te: float = 0.5, ne: float = 1e19, threshold: float = 1e-15):
         self.states = states
         self.ne = ne
         self.Te = Te
@@ -51,6 +52,8 @@ class Fermi(object):
         self.excitation = np.zeros_like(self.adj)
         self.deexcitation = np.zeros_like(self.adj)
         self.emission = np.zeros_like(self.adj)
+        self.threshold = threshold
+        # 電子数10, ne=0.0001, Te=0.5のとき、thresholdを1e-10とすると、power_methodの計算時間は2m36s
 
     @staticmethod
     def is_connected(s1: State, s2: State) -> bool:
@@ -63,7 +66,7 @@ class Fermi(object):
         return False
 
     @staticmethod
-    def power_method(matrix: NDArray[np.float64]) -> NDArray[np.float64]:
+    def power_method(matrix: NDArray[np.float64], threshold: float = 1e-15) -> NDArray[np.float64]:
         """
         べき乗法により、最大の固有値に対応する固有ベクトルを求める
         """
@@ -75,7 +78,7 @@ class Fermi(object):
             y = np.dot(matrix, x)
             eigen = np.dot(y, y) / np.dot(y, x)
             # ne=0.001のとき1minかかった。eigen = 0.9999999999464453なので精度は低い
-            if np.abs(eigen_past - eigen) < 1e-15:
+            if np.abs(eigen_past - eigen) < threshold:
                 return x
             x = y / np.linalg.norm(y)
             eigen_past = eigen
@@ -175,7 +178,7 @@ class Fermi(object):
         # ペロン=フロベニウスの定理を用いて、最大の固有値 σ に対応する固有ベクトルはすべて正の成分を持つことになる。
         non_negative_matrix = -coeff + np.max(np.abs(np.diag(coeff))) * np.eye(C.shape[0])
         if use_power:
-            x = Fermi.power_method(non_negative_matrix)
+            x = Fermi.power_method(non_negative_matrix, self.threshold)
         else:
             eigs, xs = np.linalg.eig(non_negative_matrix)
             x = np.abs(xs[:, np.argmax(eigs)])
@@ -229,11 +232,107 @@ class Fermi(object):
         mean_distribution = np.fromiter(dct.values(), dtype=float)
         return scores, mean_distribution
 
+    def calc_percentage_fluxes(self) -> tuple[tuple[list[str], dict[int : list[float]]]]:
+        """
+        Returns:
+            (influx_labels, percentage_influx_dict), (outflux_labels, percentage_outflux_dict)
+
+        Details:
+            percentage_influx_dict: {score: [percentage_c_ground, percentage_c, percentage_f, percentage_a]}
+            percentage_outflux_dict: {score: [percentage_c, percentage_f, percentage_a]}
+
+        Examples:
+            (influx_labels, percentage_influx_dict), (outflux_labels, percentage_outflux_dict) = fermi.calc_percentage_fluxes()
+            percentage_influxes = np.array(list(percentage_influx_dict.values())).T
+            plt.stackplot(list(percentage_influx_dict.keys()), *list(percentage_influxes), labels=influx_labels)
+            plt.xticks(list(percentage_influx_dict.keys()))
+            plt.show()
+        """
+        scores, population = self.get_population()
+        C_flux = np.dot(np.diag(population), self.excitation)
+        F_flux = self.deexcitation * population
+        A_flux = self.emission * population
+
+        # エネルギー準位ごとにfluxをまとめて、各エネルギー準位におけるfluxの割合を求める関数
+        def _calc_percentage_flux_dict(scores, C, F, A: list[NDArray[np.float64]], influx: bool) -> dict[int : list[float]]:
+            C_ground = None
+            if influx:
+                C_ground = C[0]
+                C = C[1:]
+            C = np.sum(C, axis=1 ^ int(influx))
+            F = np.sum(F, axis=int(influx))
+            A = np.sum(A, axis=int(influx))
+
+            # fluxes_dict = {score: [(percentage_c_ground,) percentage_c, percentage_f, percentage_a]}
+            fluxes_dict = {}
+            previous_score = scores[0]
+            c_acc = 0  # acc means accumulator
+            f_acc = 0
+            a_acc = 0
+
+            if influx:
+                c_ground_acc = 0
+                for score, c_ground, c, f, a in zip(scores, C_ground, C, F, A):
+                    if score == previous_score:
+                        c_ground_acc += c_ground
+                        c_acc += c
+                        f_acc += f
+                        a_acc += a
+                    else:
+                        total = c_ground_acc + c_acc + f_acc + a_acc
+                        fluxes_dict[previous_score] = [c_ground_acc, c_acc, f_acc, a_acc] / total
+                        previous_score = score
+                        c_ground_acc = c_ground
+                        c_acc = c
+                        f_acc = f
+                        a_acc = a
+                total = c_ground_acc + c_acc + f_acc + a_acc
+                fluxes_dict[previous_score] = [c_ground_acc, c_acc, f_acc, a_acc] / total
+                return fluxes_dict
+
+            else:
+                for score, c, f, a in zip(scores, C, F, A):
+                    if score == previous_score:
+                        c_acc += c
+                        f_acc += f
+                        a_acc += a
+                    else:
+                        total = c_acc + f_acc + a_acc
+                        fluxes_dict[previous_score] = [c_acc, f_acc, a_acc] / total
+                        previous_score = score
+                        c_acc = c
+                        f_acc = f
+                        a_acc = a
+                total = c_acc + f_acc + a_acc
+                fluxes_dict[previous_score] = [c_acc, f_acc, a_acc] / total
+                return fluxes_dict
+
+        percentage_influx_dict = _calc_percentage_flux_dict(scores, C_flux, F_flux, A_flux, influx=True)
+        influx_labels = ["基底状態からの衝突励起", "基底状態以外からの衝突励起", "衝突脱励起", "放射脱励起"]
+        percentage_outflux_dict = _calc_percentage_flux_dict(scores, C_flux, F_flux, A_flux, influx=False)
+        outflux_labels = ["衝突励起", "衝突脱励起", "放射脱励起"]
+        return (influx_labels, percentage_influx_dict), (outflux_labels, percentage_outflux_dict)
+
 
 def csv_to_states(path: str = "./output/states3.csv") -> list[State]:
     """
     各準位における、総エネルギーと電子の位置が記載されたcsvファイルを読み込み、各準位をStateインスタンスとして生成し、リスト化する。
     """
+    data = pd.read_csv(path, header=0).values
+    scores = data[:, 0]
+    configurations = data[:, 1:]
+    # 電子数の設定
+    State.n = len(configurations[0])
+    return [State(config, score) for config, score in zip(configurations, scores)]
+
+
+def csv_to_states_from_filename(filename: str = "states3.csv") -> list[State]:
+    """
+    各準位における、総エネルギーと電子の位置が記載されたcsvファイルを読み込み、各準位をStateインスタンスとして生成し、リスト化する。
+    """
+    path = os.path.join(".", "output", filename)
+    if not os.path.exists(path):
+        path = os.path.join("..", "output", filename)
     data = pd.read_csv(path, header=0).values
     scores = data[:, 0]
     configurations = data[:, 1:]
@@ -258,6 +357,47 @@ def plot(scores, population, equ, Te, ne, type="plot"):
     plt.show()
 
 
+def plots_percentage_fluxes(
+    ne_lst: list[float],
+    Te: float = 0.5,
+    figsize: tuple[float] = (13, 4),
+) -> None:
+    states3 = csv_to_states_from_filename()
+    for ne in ne_lst:
+        fig = plt.figure(figsize=figsize)
+        fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
+        (influx_labels, percentage_influx_dict), (outflux_labels, percentage_outflux_dict) = fermi.calc_percentage_fluxes()
+        percentage_influxes = np.array(list(percentage_influx_dict.values())).T
+        subfig1 = fig.add_subplot(1, 2, 1)
+        subfig1.stackplot(
+            list(percentage_influx_dict.keys()), *list(percentage_influxes), labels=influx_labels, colors=["Red", "Orange", "LimeGreen", "DodgerBlue"]
+        )
+        subfig1.set_xlabel("エネルギー準位 E")
+        subfig1.set_ylabel("流入量の割合 [%]")
+        subfig1.set_title(f"influx (ne={ne},Te={Te})")
+        subfig1.set_xticks(list(percentage_influx_dict.keys()))
+        subfig1.set_xmargin(0)
+        subfig1.set_ymargin(0)
+        subfig1.legend()
+
+        percentage_outfluxes = np.array(list(percentage_outflux_dict.values())).T
+        subfig2 = fig.add_subplot(1, 2, 2)
+        subfig2.stackplot(
+            list(percentage_outflux_dict.keys()),
+            *list(percentage_outfluxes),
+            labels=outflux_labels,
+            colors=["Red", "LimeGreen", "DodgerBlue"],
+        )
+        subfig2.set_xlabel("エネルギー準位 E")
+        subfig2.set_ylabel("流出量の割合 [%]")
+        subfig2.set_title(f"outflux (ne={ne},Te={Te})")
+        subfig2.set_xticks(list(percentage_outflux_dict.keys()))
+        subfig2.set_xmargin(0)
+        subfig2.set_ymargin(0)
+        subfig2.legend()
+        plt.show()
+
+
 def plots_dist(
     ne_lst: list[float],
     Te: float = 0.5,
@@ -272,7 +412,7 @@ def plots_dist(
     """
     各neの値におけるフェルミガスモデルを構築し、総エネルギーを横軸にとり、縮退状態について和をとった占有密度を縦軸logスケールでプロットする
     """
-    states3 = csv_to_states()
+    states3 = csv_to_states_from_filename()
     if figsize is not None:
         plt.figure(figsize=figsize)
     if include_equ:
@@ -308,7 +448,7 @@ def plots_mean_dist(
     """
     各neの値におけるフェルミガスモデルを構築し、総エネルギーを横軸、縮退状態について和をとり縮退度で平均した占有密度を縦軸logスケールでプロットする
     """
-    states3 = csv_to_states()
+    states3 = csv_to_states_from_filename()
     scores = None
     if figsize is not None:
         plt.figure(figsize=figsize)
@@ -342,7 +482,7 @@ def plots_mean_dist_compare(
     ylim: tuple[float] = None,
     figsize: tuple[float] = None,
 ) -> None:
-    states3 = csv_to_states()
+    states3 = csv_to_states_from_filename()
     if figsize is not None:
         plt.figure(figsize=figsize)
     if include_equ:
@@ -368,7 +508,7 @@ def plots_mean_dist_compare(
     plt.show()
 
 
-def plots_poplulation(
+def plots_population(
     ne_lst: list[float],
     Te: float = 0.5,
     include_equ: bool = False,
@@ -383,7 +523,7 @@ def plots_poplulation(
     各neの値におけるフェルミガスモデルを構築し、総エネルギーを横軸にとり、縮退状態を別々で考えた各状態の占有密度を縦軸logスケールでプロットする
     """
     scores = None
-    states3 = csv_to_states()
+    states3 = csv_to_states_from_filename()
     if figsize is not None:
         plt.figure(figsize=figsize)
     if include_equ:

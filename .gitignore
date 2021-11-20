@@ -5,3 +5,5 @@ images/
 .venv/
 __pycache__/
 .ipynb_checkpoints/
+20210329/notebooks/*.py
+presentation/
