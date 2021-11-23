@@ -12,11 +12,18 @@ plt.rcParams["font.size"] = 12
 
 
 class State(object):
+
     n = None
 
     def __init__(self, v: list[np.int64], score: np.int64):
         self.v = v
         self.score = score
+
+    # HACK: 各インスタンスがメソッドへの参照を持つので効率が悪い。静的メソッドにしてもいい
+    @property
+    def diff_from_ground(self):
+        ground = [i for i in range(State.n)]
+        return len(set([*ground, *self.v])) - State.n
 
     def __repr__(self) -> str:
         # return str(self.score) + "ε: " + str(self.v)
@@ -184,7 +191,7 @@ class Fermi(object):
             x = np.abs(xs[:, np.argmax(eigs)])
         return x / np.sum(x)
 
-    def get_distribution(self, use_power: bool = True) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
+    def calc_distribution(self, use_power: bool = True) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
         """
         scoreに対する、縮退状態について和をとった確率密度分布を計算する
         """
@@ -199,15 +206,15 @@ class Fermi(object):
         distribution = np.fromiter(dct.values(), dtype=float)
         return scores, distribution
 
-    def get_population(self, use_power: bool = True) -> tuple[list[int], NDArray[np.float64]]:
+    def calc_population(self, use_power: bool = True) -> tuple[list[int], NDArray[np.float64]]:
         """
         「縮退状態を分けて考えた状態」ごとのscoreに対する存在割合を計算する。
         """
         population = self._solve_equation(use_power)
-        scores = [state.score for state in self.states]
-        return scores, population
+        scores_per_state = [state.score for state in self.states]
+        return scores_per_state, population
 
-    def get_mean_distribution(self, use_power: bool = True) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
+    def calc_mean_distribution(self, use_power: bool = True) -> tuple[NDArray[np.int64], NDArray[np.float64]]:
         """
         scoreに対する、縮退状態について和をとり、縮退度で平均した確率密度分布を計算する
         """
@@ -248,7 +255,7 @@ class Fermi(object):
             plt.xticks(list(percentage_influx_dict.keys()))
             plt.show()
         """
-        scores, population = self.get_population()
+        scores, population = self.calc_population()
         C_flux = np.dot(np.diag(population), self.excitation)
         F_flux = self.deexcitation * population
         A_flux = self.emission * population
@@ -263,14 +270,15 @@ class Fermi(object):
             F = np.sum(F, axis=int(influx))
             A = np.sum(A, axis=int(influx))
 
-            # fluxes_dict = {score: [(percentage_c_ground,) percentage_c, percentage_f, percentage_a]}
-            fluxes_dict = {}
+            # flux_dict = {score: [(percentage_c_ground,) percentage_c, percentage_f, percentage_a]}
+            flux_dict = {}
             previous_score = scores[0]
             c_acc = 0  # acc means accumulator
             f_acc = 0
             a_acc = 0
 
             if influx:
+                # initialize c_ground_acc
                 c_ground_acc = 0
                 for score, c_ground, c, f, a in zip(scores, C_ground, C, F, A):
                     if score == previous_score:
@@ -280,15 +288,15 @@ class Fermi(object):
                         a_acc += a
                     else:
                         total = c_ground_acc + c_acc + f_acc + a_acc
-                        fluxes_dict[previous_score] = [c_ground_acc, c_acc, f_acc, a_acc] / total
+                        flux_dict[previous_score] = [c_ground_acc, c_acc, f_acc, a_acc] / total
                         previous_score = score
                         c_ground_acc = c_ground
                         c_acc = c
                         f_acc = f
                         a_acc = a
                 total = c_ground_acc + c_acc + f_acc + a_acc
-                fluxes_dict[previous_score] = [c_ground_acc, c_acc, f_acc, a_acc] / total
-                return fluxes_dict
+                flux_dict[previous_score] = [c_ground_acc, c_acc, f_acc, a_acc] / total
+                return flux_dict
 
             else:
                 for score, c, f, a in zip(scores, C, F, A):
@@ -298,20 +306,116 @@ class Fermi(object):
                         a_acc += a
                     else:
                         total = c_acc + f_acc + a_acc
-                        fluxes_dict[previous_score] = [c_acc, f_acc, a_acc] / total
+                        flux_dict[previous_score] = [c_acc, f_acc, a_acc] / total
                         previous_score = score
                         c_acc = c
                         f_acc = f
                         a_acc = a
                 total = c_acc + f_acc + a_acc
-                fluxes_dict[previous_score] = [c_acc, f_acc, a_acc] / total
-                return fluxes_dict
+                flux_dict[previous_score] = [c_acc, f_acc, a_acc] / total
+                return flux_dict
 
         percentage_influx_dict = _calc_percentage_flux_dict(scores, C_flux, F_flux, A_flux, influx=True)
         influx_labels = ["基底状態からの衝突励起", "基底状態以外からの衝突励起", "衝突脱励起", "放射脱励起"]
         percentage_outflux_dict = _calc_percentage_flux_dict(scores, C_flux, F_flux, A_flux, influx=False)
         outflux_labels = ["衝突励起", "衝突脱励起", "放射脱励起"]
         return (influx_labels, percentage_influx_dict), (outflux_labels, percentage_outflux_dict)
+
+    # scoreをキーとする辞書型で返すから、冗長性は低いけど使い勝手が悪い。ほぼ使わない
+    def calc_percentage_influx_per_state_dict(self) -> tuple[list[str], dict[float, list[dict[float, list[float]]]]]:
+        """
+        Returns:
+            influx_labels, percentage_influx_per_state_dict
+
+        Details:
+            influx_labels = ["基底状態からの衝突励起", "基底状態以外からの衝突励起", "衝突脱励起", "放射脱励起"]
+            percentage_influx_per_state_dict: dict[float, list[dict[float, list[float]]]]
+                = {score: [{population: [percentage_c_ground, percentage_c, percentage_f, percentage_a]}]}
+        """
+        scores, population = self.calc_population()
+        C_flux = np.dot(np.diag(population), self.excitation)
+        F_flux = self.deexcitation * population
+        A_flux = self.emission * population
+
+        C_influx_ground = C_flux[0]
+        C_influx = np.sum(C_flux[1:], axis=0)
+        F_influx = np.sum(F_flux, axis=1)
+        A_influx = np.sum(A_flux, axis=1)
+
+        percentage_influx_per_state_dict: dict[float, list[dict[float, list[float]]]] = {}
+        for i in range(len(scores)):
+            score = scores[i]
+            n = population[i]
+            c_ground = C_influx_ground[i]
+            c = C_influx[i]
+            f = F_influx[i]
+            a = A_influx[i]
+            total = c_ground + c + f + a
+            percentage_lst = [elem / total for elem in [c_ground, c, f, a]]
+            if percentage_influx_per_state_dict.get(score):
+                percentage_influx_per_state_dict[score].append({n: percentage_lst})
+            else:
+                percentage_influx_per_state_dict[score] = [{n: percentage_lst}]
+
+        influx_labels = ["基底状態からの衝突励起", "基底状態以外からの衝突励起", "衝突脱励起", "放射脱励起"]
+        return influx_labels, percentage_influx_per_state_dict
+
+    def calc_percentage_influx_per_state(self) -> tuple[list[str], list[float], list[float], list[list[float]]]:
+        """
+        Returns:
+            influx_labels, scores_per_state, population, percentage_influx_per_state
+
+        Details:
+            percentage_influx_per_state = [[percentage_c_ground, percentage_c, percentage_f, percentage_a],...]
+        """
+        scores_per_state, population = self.calc_population()
+        C_flux = np.dot(np.diag(population), self.excitation)
+        F_flux = self.deexcitation * population
+        A_flux = self.emission * population
+
+        C_influx_ground = C_flux[0]
+        C_influx = np.sum(C_flux[1:], axis=0)
+        F_influx = np.sum(F_flux, axis=1)
+        A_influx = np.sum(A_flux, axis=1)
+
+        percentage_influx_per_state = []
+        for i in range(len(scores_per_state)):
+            c_ground = C_influx_ground[i]
+            c = C_influx[i]
+            f = F_influx[i]
+            a = A_influx[i]
+            total = c_ground + c + f + a
+            percentage_lst = [elem / total for elem in [c_ground, c, f, a]]
+            percentage_influx_per_state.append(percentage_lst)
+
+        influx_labels = ["基底状態からの衝突励起", "基底状態以外からの衝突励起", "衝突脱励起", "放射脱励起"]
+        return influx_labels, scores_per_state, population, percentage_influx_per_state
+
+    def calc_population_per_diff(self) -> tuple[tuple[list[int], list[float]]]:
+        """
+        Returns:
+            (scores_per_state_1, population_1), (scores_per_state_2, population_2), (scores_per_state_3, population_3)
+        """
+        scores_per_state_1 = []
+        scores_per_state_2 = []
+        scores_per_state_3 = []
+
+        population_1 = []
+        population_2 = []
+        population_3 = []
+        _, population = self.calc_population()
+        for state, n in zip(self.states, population):
+            if state.diff_from_ground == 1:
+                scores_per_state_1.append(state.score)
+                population_1.append(n)
+            elif state.diff_from_ground == 2:
+                scores_per_state_2.append(state.score)
+                population_2.append(n)
+            else:
+                scores_per_state_3.append(state.score)
+                population_3.append(n)
+
+        return (scores_per_state_1, population_1), (scores_per_state_2, population_2), (scores_per_state_3, population_3)
 
 
 def csv_to_states(path: str = "./output/states3.csv") -> list[State]:
@@ -398,6 +502,122 @@ def plots_percentage_fluxes(
         plt.show()
 
 
+def plot_percentage_influx_per_state(ne: float, Te: float = 0.5, is_dark: bool = False, width: float = 0.03, figsize: tuple[float] = (8, 8)) -> None:
+    import matplotlib.ticker as mticker
+
+    def log_tick_formatter(val, pos=None):
+        return f"$10^{{{int(val)}}}$"
+
+    def default_formatter(val, pos=None):
+        return fr"${val}$"
+
+    states3 = csv_to_states_from_filename()
+    fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
+    influx_labels, scores_per_state, population, percentage_influx_per_state = fermi.calc_percentage_influx_per_state()
+
+    x_pos = scores_per_state
+    y_pos = np.log(np.array(population))
+    z_pos = np.zeros(len(x_pos))
+    dx = np.full(len(x_pos), width)
+    dy = np.full(len(y_pos), width)
+    percentage_influx_per_state = np.array(percentage_influx_per_state).T
+
+    scores = sorted(list(set(scores_per_state)))
+
+    fig = plt.figure(figsize=figsize, facecolor="black" if is_dark else "white")
+    ax = fig.add_subplot(projection="3d")
+
+    ax.set_title(fr"$n_e={ne},  T_e={Te}$", color="white" if is_dark else "black")
+    ax.set_xlabel("エネルギー準位")
+    ax.set_ylabel("占有密度 (log)")
+    ax.set_zlabel("流入量の割合")
+
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(default_formatter))
+    ax.zaxis.set_major_formatter(mticker.FuncFormatter(default_formatter))
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(integer=True))
+
+    _z_pos = np.copy(z_pos)
+    colors = ["Red", "Gold", "GreenYellow", "DeepSkyBlue"] if is_dark else ["Red", "Gold", "Green", "SkyBlue"]
+    for dz, color in zip(percentage_influx_per_state, colors):
+        ax.bar3d(x_pos, y_pos, _z_pos, dx, dy, dz, alpha=1, color=color, shade=False)
+        _z_pos += dz
+
+    color_proxies = [plt.Rectangle((0, 0), 1, 1, fc=color) for color in colors]
+    ax.legend(color_proxies, influx_labels, fontsize=10)
+
+    ax.set_xticks([score for score in scores if score % 2 == 1])
+    ax.set_zticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    ax.grid(False)
+
+    ax.set_facecolor("black" if is_dark else "white")
+    ax.xaxis.label.set_color("white" if is_dark else "black")
+    ax.yaxis.label.set_color("white" if is_dark else "black")
+    ax.zaxis.label.set_color("white" if is_dark else "black")
+    ax.tick_params(axis="x", colors="white" if is_dark else "black")
+    ax.tick_params(axis="y", colors="white" if is_dark else "black")
+    ax.tick_params(axis="z", colors="white" if is_dark else "black")
+    plt.show()
+
+
+def plot_bar3d(
+    dzs: list[list[float]],
+    x_pos: list[int],
+    y_pos: list[float],
+    title: str,
+    labels: list[str],
+    width: float,
+    figsize: tuple[int],
+    is_dark: bool = False,
+):
+    import matplotlib.ticker as mticker
+
+    def log_tick_formatter(val, pos=None):
+        return f"$10^{{{int(val)}}}$"
+
+    def default_formatter(val, pos=None):
+        return fr"${val}$"
+
+    y_pos = np.log(np.array(y_pos))
+    z_pos = np.zeros(len(x_pos))
+    dx = np.full(len(x_pos), width)
+    dy = np.full(len(y_pos), width)
+    dzs = np.array(dzs).T
+
+    fig = plt.figure(figsize=figsize, facecolor="black" if is_dark else "white")
+    ax = fig.add_subplot(projection="3d")
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(default_formatter))
+    ax.zaxis.set_major_formatter(mticker.FuncFormatter(default_formatter))
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(integer=True))
+
+    _z_pos = np.copy(z_pos)
+    colors = ["Red", "Gold", "GreenYellow", "DeepSkyBlue"] if is_dark else ["Red", "Gold", "Green", "SkyBlue"]
+    for dz, color in zip(dzs, colors):
+        ax.bar3d(x_pos, y_pos, _z_pos, dx, dy, dz, alpha=1, color=color, shade=False)
+        _z_pos += dz
+
+    color_proxies = [plt.Rectangle((0, 0), 1, 1, fc=color) for color in colors]
+    ax.legend(color_proxies, labels, fontsize=10)
+
+    xticks = sorted(list(set(x_pos)))
+    ax.set_xticks([xtick for xtick in xticks if xtick % 2 == 1])
+    ax.set_zticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    ax.set_title(title, color="white" if is_dark else "black")
+    ax.set_xlabel("エネルギー準位")
+    ax.set_ylabel("占有密度 (log)")
+    ax.set_zlabel("流入量の割合")
+    ax.grid(False)
+    ax.set_facecolor("black" if is_dark else "white")
+    ax.xaxis.label.set_color("white" if is_dark else "black")
+    ax.yaxis.label.set_color("white" if is_dark else "black")
+    ax.zaxis.label.set_color("white" if is_dark else "black")
+    ax.tick_params(axis="x", colors="white" if is_dark else "black")
+    ax.tick_params(axis="y", colors="white" if is_dark else "black")
+    ax.tick_params(axis="z", colors="white" if is_dark else "black")
+    plt.show()
+
+
 def plots_dist(
     ne_lst: list[float],
     Te: float = 0.5,
@@ -417,11 +637,11 @@ def plots_dist(
         plt.figure(figsize=figsize)
     if include_equ:
         fermi = Fermi(states3, equ=True, Te=Te, ne=1e19)
-        scores, population = fermi.get_distribution(use_power)
+        scores, population = fermi.calc_distribution(use_power)
         plt.plot(scores, population, label="equilibrium", marker=".", linewidth=0.8, ms=3)
     for ne in tqdm(ne_lst):
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
-        scores, population = fermi.get_distribution(use_power)
+        scores, population = fermi.calc_distribution(use_power)
         plt.plot(scores, population, label=fr"$n_e$ = {ne}", marker=".", linewidth=0.8, ms=3)
     # plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0)
     plt.legend(loc="lower left", fontsize=labelsize)
@@ -455,11 +675,11 @@ def plots_mean_dist(
     if include_equ:
         ne = 1e20
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
-        scores, distribution = fermi.get_mean_distribution(use_power)
+        scores, distribution = fermi.calc_mean_distribution(use_power)
         plt.plot(scores, distribution, label=fr"$n_e$={ne} (equilibrium)", marker=".", linewidth=1, ms=4)
     for ne in tqdm(ne_lst):
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
-        scores, distribution = fermi.get_mean_distribution(use_power)
+        scores, distribution = fermi.calc_mean_distribution(use_power)
         plt.plot(scores, distribution, label=fr"$n_e$={ne}", marker=".", linewidth=1, ms=4)
     # plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0, fontsize=labelsize)
     plt.legend(loc="lower left", fontsize=labelsize)
@@ -487,14 +707,14 @@ def plots_mean_dist_compare(
         plt.figure(figsize=figsize)
     if include_equ:
         fermi = Fermi(states3, equ=True, Te=Te, ne=1e19)
-        scores, distribution = fermi.get_mean_distribution(use_power)
-        scores_normalized, distribution_normalized = fermi.get_mean_distribution(use_power)
+        scores, distribution = fermi.calc_mean_distribution(use_power)
+        scores_normalized, distribution_normalized = fermi.calc_mean_distribution(use_power)
         plt.plot(scores, distribution, label="equilibrium", marker=".", linewidth=0.8, ms=3)
         plt.plot(scores_normalized, distribution_normalized, label="equilibrium (normalized)", marker=".", linewidth=0.8, ms=3)
     for ne in tqdm(ne_lst):
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
-        scores, distribution = fermi.get_mean_distribution(use_power)
-        scores_normalized, distribution_normalized = fermi.get_mean_distribution(use_power)
+        scores, distribution = fermi.calc_mean_distribution(use_power)
+        scores_normalized, distribution_normalized = fermi.calc_mean_distribution(use_power)
         plt.plot(scores, distribution, label=fr"$n_e$ = {ne}", marker=".", linewidth=0.8, ms=3)
         plt.plot(scores_normalized, distribution_normalized, label=fr"$n_e$ = {ne} (normalized)", marker=".", linewidth=0.8, ms=3)
     # plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0)
@@ -529,11 +749,11 @@ def plots_population(
     if include_equ:
         ne = 1e20
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
-        scores, population = fermi.get_population(use_power)
+        scores, population = fermi.calc_population(use_power)
         plt.scatter(scores, population, label=fr"$n_e$={ne} (equilibrium)", s=2, alpha=1.0)
     for ne in tqdm(ne_lst):
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
-        scores, population = fermi.get_population(use_power)
+        scores, population = fermi.calc_population(use_power)
         plt.scatter(scores, population, label=fr"$n_e$={ne}", s=2, alpha=1.0)
     # plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0, fontsize=labelsize)
     lgnd = plt.legend(loc="lower left", fontsize=labelsize)
