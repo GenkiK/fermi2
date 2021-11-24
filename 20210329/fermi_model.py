@@ -502,62 +502,24 @@ def plots_percentage_fluxes(
         plt.show()
 
 
-def plot_percentage_influx_per_state(ne: float, Te: float = 0.5, is_dark: bool = False, width: float = 0.03, figsize: tuple[float] = (8, 8)) -> None:
-    import matplotlib.ticker as mticker
-
-    def log_tick_formatter(val, pos=None):
-        return f"$10^{{{int(val)}}}$"
-
-    def default_formatter(val, pos=None):
-        return fr"${val}$"
+def plot_percentage_influx_per_state_3d(
+    ne: float, Te: float = 0.5, is_dark: bool = False, width: float = 0.03, figsize: tuple[float] = (8, 8)
+) -> None:
 
     states3 = csv_to_states_from_filename()
     fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
     influx_labels, scores_per_state, population, percentage_influx_per_state = fermi.calc_percentage_influx_per_state()
 
-    x_pos = scores_per_state
-    y_pos = np.log(np.array(population))
-    z_pos = np.zeros(len(x_pos))
-    dx = np.full(len(x_pos), width)
-    dy = np.full(len(y_pos), width)
-    percentage_influx_per_state = np.array(percentage_influx_per_state).T
-
-    scores = sorted(list(set(scores_per_state)))
-
-    fig = plt.figure(figsize=figsize, facecolor="black" if is_dark else "white")
-    ax = fig.add_subplot(projection="3d")
-
-    ax.set_title(fr"$n_e={ne},  T_e={Te}$", color="white" if is_dark else "black")
-    ax.set_xlabel("エネルギー準位")
-    ax.set_ylabel("占有密度 (log)")
-    ax.set_zlabel("流入量の割合")
-
-    ax.xaxis.set_major_formatter(mticker.FuncFormatter(default_formatter))
-    ax.zaxis.set_major_formatter(mticker.FuncFormatter(default_formatter))
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
-    ax.yaxis.set_major_locator(mticker.MaxNLocator(integer=True))
-
-    _z_pos = np.copy(z_pos)
-    colors = ["Red", "Gold", "GreenYellow", "DeepSkyBlue"] if is_dark else ["Red", "Gold", "Green", "SkyBlue"]
-    for dz, color in zip(percentage_influx_per_state, colors):
-        ax.bar3d(x_pos, y_pos, _z_pos, dx, dy, dz, alpha=1, color=color, shade=False)
-        _z_pos += dz
-
-    color_proxies = [plt.Rectangle((0, 0), 1, 1, fc=color) for color in colors]
-    ax.legend(color_proxies, influx_labels, fontsize=10)
-
-    ax.set_xticks([score for score in scores if score % 2 == 1])
-    ax.set_zticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
-    ax.grid(False)
-
-    ax.set_facecolor("black" if is_dark else "white")
-    ax.xaxis.label.set_color("white" if is_dark else "black")
-    ax.yaxis.label.set_color("white" if is_dark else "black")
-    ax.zaxis.label.set_color("white" if is_dark else "black")
-    ax.tick_params(axis="x", colors="white" if is_dark else "black")
-    ax.tick_params(axis="y", colors="white" if is_dark else "black")
-    ax.tick_params(axis="z", colors="white" if is_dark else "black")
-    plt.show()
+    plot_bar3d(
+        dzs=percentage_influx_per_state,
+        x_pos=scores_per_state,
+        y_pos=population,
+        title=fr"$n_e={ne},  T_e={Te}$",
+        labels=influx_labels,
+        width=width,
+        figsize=figsize,
+        is_dark=is_dark,
+    )
 
 
 def plot_bar3d(
@@ -570,6 +532,34 @@ def plot_bar3d(
     figsize: tuple[int],
     is_dark: bool = False,
 ):
+    """
+    Args:
+        dzs: list[list[float]]  z軸方向に重ねていく２次元配列。１つの行に、ある点(x, y)に重ねていきたいdzの要素を格納したものを渡す。
+
+        x_pos: list[int]  xの座標の配列
+
+        y_pos: list[float]  yの座標の配列
+
+        title: str  グラフのタイトル
+
+        labels: list[str]  z軸方向に重ねていくもののラベル
+
+        width: float  barの幅
+
+        figsize: tuple[int]  グラフの大きさ
+
+        is_dark:  bool ダークモードでプロットするかどうかを決める真理値
+
+    Example:
+        plot_bar3d(
+            dzs=percentage_influx_per_state,
+            x_pos=scores_per_state,
+            y_pos=population,
+            title=fr"$n_e={ne},  T_e={Te}$",
+            labels=influx_labels,
+            is_dark=is_dark,
+        )
+    """
     import matplotlib.ticker as mticker
 
     def log_tick_formatter(val, pos=None):
