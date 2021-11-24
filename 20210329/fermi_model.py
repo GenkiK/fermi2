@@ -49,6 +49,9 @@ class State(object):
 
 
 class Fermi(object):
+    influx_labels: list[str] = ["基底状態からの衝突励起", "基底状態以外からの衝突励起", "衝突脱励起", "放射脱励起"]
+    outflux_labels: list[str] = ["衝突励起", "衝突脱励起", "放射脱励起"]
+
     def __init__(self, states: list[State], equ: bool = True, Te: float = 0.5, ne: float = 1e19, threshold: float = 1e-15):
         self.states = states
         self.ne = ne
@@ -239,19 +242,19 @@ class Fermi(object):
         mean_distribution = np.fromiter(dct.values(), dtype=float)
         return scores, mean_distribution
 
-    def calc_percentage_fluxes(self) -> tuple[tuple[list[str], dict[int : list[float]]]]:
+    def calc_percentage_fluxes(self) -> tuple[dict[int : list[float]]]:
         """
         Returns:
-            (influx_labels, percentage_influx_dict), (outflux_labels, percentage_outflux_dict)
+            percentage_influx_dict, percentage_outflux_dict
 
         Details:
             percentage_influx_dict: {score: [percentage_c_ground, percentage_c, percentage_f, percentage_a]}
             percentage_outflux_dict: {score: [percentage_c, percentage_f, percentage_a]}
 
         Examples:
-            (influx_labels, percentage_influx_dict), (outflux_labels, percentage_outflux_dict) = fermi.calc_percentage_fluxes()
+            percentage_influx_dict, percentage_outflux_dict = fermi.calc_percentage_fluxes()
             percentage_influxes = np.array(list(percentage_influx_dict.values())).T
-            plt.stackplot(list(percentage_influx_dict.keys()), *list(percentage_influxes), labels=influx_labels)
+            plt.stackplot(list(percentage_influx_dict.keys()), *list(percentage_influxes), labels=Fermi.influx_labels)
             plt.xticks(list(percentage_influx_dict.keys()))
             plt.show()
         """
@@ -316,19 +319,16 @@ class Fermi(object):
                 return flux_dict
 
         percentage_influx_dict = _calc_percentage_flux_dict(scores, C_flux, F_flux, A_flux, influx=True)
-        influx_labels = ["基底状態からの衝突励起", "基底状態以外からの衝突励起", "衝突脱励起", "放射脱励起"]
         percentage_outflux_dict = _calc_percentage_flux_dict(scores, C_flux, F_flux, A_flux, influx=False)
-        outflux_labels = ["衝突励起", "衝突脱励起", "放射脱励起"]
-        return (influx_labels, percentage_influx_dict), (outflux_labels, percentage_outflux_dict)
+        return percentage_influx_dict, percentage_outflux_dict
 
     # scoreをキーとする辞書型で返すから、冗長性は低いけど使い勝手が悪い。ほぼ使わない
-    def calc_percentage_influx_per_state_dict(self) -> tuple[list[str], dict[float, list[dict[float, list[float]]]]]:
+    def calc_percentage_influx_per_state_dict(self) -> dict[float, list[dict[float, list[float]]]]:
         """
         Returns:
-            influx_labels, percentage_influx_per_state_dict
+            percentage_influx_per_state_dict
 
         Details:
-            influx_labels = ["基底状態からの衝突励起", "基底状態以外からの衝突励起", "衝突脱励起", "放射脱励起"]
             percentage_influx_per_state_dict: dict[float, list[dict[float, list[float]]]]
                 = {score: [{population: [percentage_c_ground, percentage_c, percentage_f, percentage_a]}]}
         """
@@ -357,13 +357,12 @@ class Fermi(object):
             else:
                 percentage_influx_per_state_dict[score] = [{n: percentage_lst}]
 
-        influx_labels = ["基底状態からの衝突励起", "基底状態以外からの衝突励起", "衝突脱励起", "放射脱励起"]
-        return influx_labels, percentage_influx_per_state_dict
+        return percentage_influx_per_state_dict
 
-    def calc_percentage_influx_per_state(self) -> tuple[list[str], list[float], list[float], list[list[float]]]:
+    def calc_percentage_influx_per_state(self) -> tuple[list[float], list[float], list[list[float]]]:
         """
         Returns:
-            influx_labels, scores_per_state, population, percentage_influx_per_state
+            scores_per_state, population, percentage_influx_per_state
 
         Details:
             percentage_influx_per_state = [[percentage_c_ground, percentage_c, percentage_f, percentage_a],...]
@@ -388,8 +387,7 @@ class Fermi(object):
             percentage_lst = [elem / total for elem in [c_ground, c, f, a]]
             percentage_influx_per_state.append(percentage_lst)
 
-        influx_labels = ["基底状態からの衝突励起", "基底状態以外からの衝突励起", "衝突脱励起", "放射脱励起"]
-        return influx_labels, scores_per_state, population, percentage_influx_per_state
+        return scores_per_state, population, percentage_influx_per_state
 
     def calc_population_per_diff(self) -> tuple[tuple[list[int], list[float]]]:
         """
@@ -411,11 +409,54 @@ class Fermi(object):
             elif state.diff_from_ground == 2:
                 scores_per_state_2.append(state.score)
                 population_2.append(n)
-            else:
+            elif state.diff_from_ground == 3:  # 基底状態を含んでしまうことを防止するため、elseを使わない
                 scores_per_state_3.append(state.score)
                 population_3.append(n)
 
         return (scores_per_state_1, population_1), (scores_per_state_2, population_2), (scores_per_state_3, population_3)
+
+    def calc_percentage_influx_per_state_each_diff(self) -> tuple[list[list[int]], list[list[float]], list[list[list[float]]]]:
+        """
+        各状態におけるinfluxの内訳の割合を、基底状態とのdiffごとに出力する
+
+        Returns:
+            list[list[int]]: diffごとに分けた、各状態のscore
+
+            list[list[float]]: diffごとに分けた、各状態のpopulation
+
+            list[list[list[float]]]: diffごとに分けた、各状態におけるinfluxの内訳の割合。diff -> state -> percentage という順で階層分けされている
+                (ex): [[[percentage_c_ground, percentage_c, percentage_f, percentage_a],...], []], [[], []]]
+        """
+        scores_per_state, population = self.calc_population()
+        C_flux = np.dot(np.diag(population), self.excitation)
+        F_flux = self.deexcitation * population
+        A_flux = self.emission * population
+
+        C_influx_ground = C_flux[0]
+        C_influx = np.sum(C_flux[1:], axis=0)
+        F_influx = np.sum(F_flux, axis=1)
+        A_influx = np.sum(A_flux, axis=1)
+
+        # initialize
+        percentage_influx_per_state_each_diff = [[], [], []]
+        scores_per_state_each_diff = [[], [], []]
+        population_each_diff = [[], [], []]
+
+        for i, state in enumerate(self.states):
+            # 基底状態のinfluxの内訳は含めないこととする
+            if i == 0:
+                continue
+            c_ground = C_influx_ground[i]
+            c = C_influx[i]
+            f = F_influx[i]
+            a = A_influx[i]
+            total = c_ground + c + f + a
+            diff_idx = state.diff_from_ground - 1
+            percentage_lst = [elem / total for elem in [c_ground, c, f, a]]
+            percentage_influx_per_state_each_diff[diff_idx].append(percentage_lst)
+            scores_per_state_each_diff[diff_idx].append(scores_per_state[i])
+            population_each_diff[diff_idx].append(population[i])
+        return scores_per_state_each_diff, population_each_diff, percentage_influx_per_state_each_diff
 
 
 def csv_to_states(path: str = "./output/states3.csv") -> list[State]:
@@ -470,11 +511,14 @@ def plots_percentage_fluxes(
     for ne in ne_lst:
         fig = plt.figure(figsize=figsize)
         fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
-        (influx_labels, percentage_influx_dict), (outflux_labels, percentage_outflux_dict) = fermi.calc_percentage_fluxes()
+        percentage_influx_dict, percentage_outflux_dict = fermi.calc_percentage_fluxes()
         percentage_influxes = np.array(list(percentage_influx_dict.values())).T
         subfig1 = fig.add_subplot(1, 2, 1)
         subfig1.stackplot(
-            list(percentage_influx_dict.keys()), *list(percentage_influxes), labels=influx_labels, colors=["Red", "Orange", "LimeGreen", "DodgerBlue"]
+            list(percentage_influx_dict.keys()),
+            *list(percentage_influxes),
+            labels=Fermi.influx_labels,
+            colors=["Red", "Orange", "LimeGreen", "DodgerBlue"],
         )
         subfig1.set_xlabel("エネルギー準位 E")
         subfig1.set_ylabel("流入量の割合 [%]")
@@ -489,7 +533,7 @@ def plots_percentage_fluxes(
         subfig2.stackplot(
             list(percentage_outflux_dict.keys()),
             *list(percentage_outfluxes),
-            labels=outflux_labels,
+            labels=Fermi.outflux_labels,
             colors=["Red", "LimeGreen", "DodgerBlue"],
         )
         subfig2.set_xlabel("エネルギー準位 E")
@@ -503,23 +547,132 @@ def plots_percentage_fluxes(
 
 
 def plot_percentage_influx_per_state_3d(
-    ne: float, Te: float = 0.5, is_dark: bool = False, width: float = 0.03, figsize: tuple[float] = (8, 8)
+    ne: float,
+    Te: float = 0.5,
+    is_dark: bool = False,
+    diff: list[int] = None,
+    separated: bool = False,
+    width: float = 0.03,
+    figsize: int = 8,
 ) -> None:
-
     states3 = csv_to_states_from_filename()
     fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
-    influx_labels, scores_per_state, population, percentage_influx_per_state = fermi.calc_percentage_influx_per_state()
+    title = fr"$n_e={ne}, T_e={Te}$"
 
-    plot_bar3d(
-        dzs=percentage_influx_per_state,
-        x_pos=scores_per_state,
-        y_pos=population,
-        title=fr"$n_e={ne},  T_e={Te}$",
-        labels=influx_labels,
-        width=width,
-        figsize=figsize,
-        is_dark=is_dark,
-    )
+    population = []
+    scores_per_state = []
+    percentage_influx_per_state = []
+    is_diff = False
+
+    if separated and diff is not None:
+        scores_per_state_each_diff, population_each_diff, percentage_influx_per_state_each_diff = fermi.calc_percentage_influx_per_state_each_diff()
+        # 各行の要素数がバラバラなpopulation_each_diffを１次元ndarrayに展開
+        flat_population_each_diff = np.array(sum(population_each_diff, []))
+        min_log_population = np.min(np.log(flat_population_each_diff))
+
+        for i in range(3):
+            if i + 1 in diff:
+                scores_per_state.append(scores_per_state_each_diff[i])
+                population.append(population_each_diff[i])
+                percentage_influx_per_state.append(percentage_influx_per_state_each_diff[i])
+        plot_some_bar3d(
+            dzs_lst=percentage_influx_per_state,
+            x_pos_lst=scores_per_state,
+            y_pos_lst=population,
+            titles=[title + f", diff=[{i}]" for i in diff],
+            labels=Fermi.influx_labels,
+            width=width,
+            each_figsize=figsize,
+            is_dark=is_dark,
+            xticks=sorted(list(set([state.score for state in fermi.states]))) if is_diff else None,
+            ylim=(min_log_population - 10, 10),
+        )
+
+    else:
+        if diff is None:
+            scores_per_state, population, percentage_influx_per_state = fermi.calc_percentage_influx_per_state()
+            min_log_population = np.min(np.log(population))
+        else:
+            is_diff = True
+            (
+                scores_per_state_each_diff,
+                population_each_diff,
+                percentage_influx_per_state_each_diff,
+            ) = fermi.calc_percentage_influx_per_state_each_diff()
+            # 各行の要素数がバラバラなpopulation_each_diffを１次元ndarrayに展開
+            flat_population_each_diff = np.array(sum(population_each_diff, []))
+            min_log_population = np.min(np.log(flat_population_each_diff))
+
+            for i in range(3):
+                if i + 1 in diff:
+                    scores_per_state += scores_per_state_each_diff[i]
+                    population += population_each_diff[i]
+                    percentage_influx_per_state += percentage_influx_per_state_each_diff[i]
+
+        plot_bar3d(
+            dzs=percentage_influx_per_state,
+            x_pos=scores_per_state,
+            y_pos=population,
+            title=title + f", diff={diff}" if is_diff else title,
+            labels=Fermi.influx_labels,
+            width=width,
+            figsize=figsize,
+            is_dark=is_dark,
+            xticks=sorted(list(set([state.score for state in fermi.states]))) if is_diff else None,
+            ylim=(min_log_population - 10, 10),
+        )
+
+
+def plot_some_bar3d(
+    dzs_lst: list[list[list[float]]],
+    x_pos_lst: list[list[int]],
+    y_pos_lst: list[list[float]],
+    titles: list[str],
+    labels: list[str],
+    width: float,
+    each_figsize: int,
+    is_dark: bool,
+    xticks: list[int] = None,
+    ylim: list[float] = None,
+):
+    """
+    Args:
+        dzs_lst (list[list[list[float]]])  各グラフのz軸方向に重ねていく２次元配列を格納した配列。２次元配列の１つの行に、ある点(x, y)に重ねていきたいdzの要素を格納したものを渡す。
+
+        x_pos_lst (list[list[int]])  各グラフのxの座標の配列、の配列
+
+        y_pos_lst (list[list[float]])  各グラフのyの座標の配列、の配列
+
+        titles (list[str])  各グラフのタイトルの配列
+
+        labels (list[str])  z軸方向に重ねていくもののラベル
+
+        width (float)  barの幅
+
+        each_figsize (int)  各グラフの大きさ
+
+        is_dark (bool)  ダークモードでプロットするかどうかを決める真理値
+
+        xticks (list[int])  x軸のticks。指定しなければ自動的にいい感じに決定してくれる。
+
+        ylim (list[float])  y軸の範囲。diffごとにプロットするときなどに指定することで、同じneで実験したときの表示されるy軸の範囲を一定にできる
+
+    Example:
+        plot_bar3d(
+            dzs=percentage_influx_per_state,
+            x_pos=scores_per_state,
+            y_pos=population,
+            title=fr"$n_e={ne},  T_e={Te}$",
+            labels=Fermi.influx_labels,
+            is_dark=is_dark,
+        )
+    """
+    plot_num = len(dzs_lst)
+    fig = plt.figure(figsize=(each_figsize*plot_num, each_figsize), facecolor="black" if is_dark else "white")
+    for i, (dzs, x_pos, y_pos, title) in enumerate(zip(dzs_lst, x_pos_lst, y_pos_lst, titles)):
+        ax = fig.add_subplot(1, plot_num, i + 1, projection="3d")
+        plot_bar3d(dzs, x_pos, y_pos, title, labels, width, each_figsize, is_dark, xticks, ylim, ax=ax, show=False)
+    plt.show()
 
 
 def plot_bar3d(
@@ -529,26 +682,38 @@ def plot_bar3d(
     title: str,
     labels: list[str],
     width: float,
-    figsize: tuple[int],
-    is_dark: bool = False,
+    figsize: int,
+    is_dark: bool,
+    xticks: list[int] = None,
+    ylim: list[float] = None,
+    ax: plt.Axes = None,
+    show: bool = True,
 ):
     """
     Args:
-        dzs: list[list[float]]  z軸方向に重ねていく２次元配列。１つの行に、ある点(x, y)に重ねていきたいdzの要素を格納したものを渡す。
+        dzs (list[list[float]])  z軸方向に重ねていく２次元配列。１つの行に、ある点(x, y)に重ねていきたいdzの要素を格納したものを渡す。
 
-        x_pos: list[int]  xの座標の配列
+        x_pos (list[int])  xの座標の配列
 
-        y_pos: list[float]  yの座標の配列
+        y_pos (list[float])  yの座標の配列
 
-        title: str  グラフのタイトル
+        title (str)  グラフのタイトル
 
-        labels: list[str]  z軸方向に重ねていくもののラベル
+        labels (list[str])  z軸方向に重ねていくもののラベル
 
-        width: float  barの幅
+        width (float)  barの幅
 
-        figsize: tuple[int]  グラフの大きさ
+        figsize (int)  グラフの大きさ
 
-        is_dark:  bool ダークモードでプロットするかどうかを決める真理値
+        is_dark (bool)  ダークモードでプロットするかどうかを決める真理値
+
+        xticks (list[int])  x軸のticks。指定しなければ自動的にいい感じに決定してくれる。
+
+        ylim (list[float])  y軸の範囲。diffごとにプロットするときなどに指定することで、同じneで実験したときの表示されるy軸の範囲を一定にできる
+
+        ax (plt.Axes)  Axesオブジェクト。この関数をoverwrapした、複数個のグラフを横並びでプロットする関数で使用する。
+
+        show (bool)  plt.show()を実行するかどうかを決める真理値。plot_bar3d()をoverwrapする関数内で使用する。
 
     Example:
         plot_bar3d(
@@ -556,7 +721,7 @@ def plot_bar3d(
             x_pos=scores_per_state,
             y_pos=population,
             title=fr"$n_e={ne},  T_e={Te}$",
-            labels=influx_labels,
+            labels=Fermi.influx_labels,
             is_dark=is_dark,
         )
     """
@@ -571,11 +736,12 @@ def plot_bar3d(
     y_pos = np.log(np.array(y_pos))
     z_pos = np.zeros(len(x_pos))
     dx = np.full(len(x_pos), width)
-    dy = np.full(len(y_pos), width)
+    dy = np.full(len(y_pos), np.exp(width))
     dzs = np.array(dzs).T
 
-    fig = plt.figure(figsize=figsize, facecolor="black" if is_dark else "white")
-    ax = fig.add_subplot(projection="3d")
+    if ax is None:
+        fig = plt.figure(figsize=(figsize, figsize), facecolor="black" if is_dark else "white")
+        ax = fig.add_subplot(1,1,1, projection="3d")
     ax.xaxis.set_major_formatter(mticker.FuncFormatter(default_formatter))
     ax.zaxis.set_major_formatter(mticker.FuncFormatter(default_formatter))
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
@@ -590,9 +756,11 @@ def plot_bar3d(
     color_proxies = [plt.Rectangle((0, 0), 1, 1, fc=color) for color in colors]
     ax.legend(color_proxies, labels, fontsize=10)
 
-    xticks = sorted(list(set(x_pos)))
+    xticks = sorted(list(set(x_pos))) if xticks is None else xticks
     ax.set_xticks([xtick for xtick in xticks if xtick % 2 == 1])
     ax.set_zticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    if ylim is not None:
+        ax.set_ylim(ylim)
     ax.set_title(title, color="white" if is_dark else "black")
     ax.set_xlabel("エネルギー準位")
     ax.set_ylabel("占有密度 (log)")
@@ -605,7 +773,8 @@ def plot_bar3d(
     ax.tick_params(axis="x", colors="white" if is_dark else "black")
     ax.tick_params(axis="y", colors="white" if is_dark else "black")
     ax.tick_params(axis="z", colors="white" if is_dark else "black")
-    plt.show()
+    if show:
+        plt.show()
 
 
 def plots_dist(
