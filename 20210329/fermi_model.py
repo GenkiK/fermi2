@@ -122,9 +122,9 @@ class Fermi(object):
             for j in range(i + 1, self.num_states):
                 if Fermi.is_connected(self.states[i], self.states[j]):
                     # i→jの遷移
-                    self.excitation[i, j] = self.ne * np.exp(-(self.states[j].score - self.states[i].score) / self.Te)
+                    self.excitation[i, j] = self.ne / (self.Te) ** 0.5 * np.exp(-(self.states[j].score - self.states[i].score) / self.Te)
                     # j→iの遷移
-                    self.deexcitation[i, j] = self.ne
+                    self.deexcitation[i, j] = self.ne / (self.Te) ** 0.5
                     if not self.equ:
                         # j→iの遷移
                         self.emission[i, j] = (self.states[j].score - self.states[i].score) ** 3
