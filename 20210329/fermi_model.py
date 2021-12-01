@@ -554,6 +554,7 @@ def plot_percentage_influx_per_state_3d(
     separated: bool = False,
     width: float = 0.03,
     figsize: int = 8,
+    labelsize: int = 8,
 ) -> None:
     states3 = csv_to_states_from_filename()
     fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
@@ -581,10 +582,11 @@ def plot_percentage_influx_per_state_3d(
             y_pos_lst=population,
             titles=[title + f", diff=[{i}]" for i in diff],
             labels=Fermi.influx_labels,
+            labelsize=labelsize,
             width=width,
             each_figsize=figsize,
             is_dark=is_dark,
-            xticks=sorted(list(set([state.score for state in fermi.states]))) if is_diff else None,
+            xticks=sorted(list(set([state.score for state in fermi.states]))),
             ylim=(min_log_population - 10, 10),
         )
 
@@ -615,6 +617,7 @@ def plot_percentage_influx_per_state_3d(
             y_pos=population,
             title=title + f", diff={diff}" if is_diff else title,
             labels=Fermi.influx_labels,
+            labelsize=labelsize,
             width=width,
             figsize=figsize,
             is_dark=is_dark,
@@ -629,6 +632,7 @@ def plot_some_bar3d(
     y_pos_lst: list[list[float]],
     titles: list[str],
     labels: list[str],
+    labelsize: int,
     width: float,
     each_figsize: int,
     is_dark: bool,
@@ -646,6 +650,8 @@ def plot_some_bar3d(
         titles (list[str])  各グラフのタイトルの配列
 
         labels (list[str])  z軸方向に重ねていくもののラベル
+
+        labelsize (int)  ラベルのサイズ
 
         width (float)  barの幅
 
@@ -668,10 +674,24 @@ def plot_some_bar3d(
         )
     """
     plot_num = len(dzs_lst)
-    fig = plt.figure(figsize=(each_figsize*plot_num, each_figsize), facecolor="black" if is_dark else "white")
+    fig = plt.figure(figsize=(each_figsize * plot_num, each_figsize), facecolor="black" if is_dark else "white")
     for i, (dzs, x_pos, y_pos, title) in enumerate(zip(dzs_lst, x_pos_lst, y_pos_lst, titles)):
         ax = fig.add_subplot(1, plot_num, i + 1, projection="3d")
-        plot_bar3d(dzs, x_pos, y_pos, title, labels, width, each_figsize, is_dark, xticks, ylim, ax=ax, show=False)
+        plot_bar3d(
+            dzs=dzs,
+            x_pos=x_pos,
+            y_pos=y_pos,
+            title=title,
+            labels=labels,
+            labelsize=labelsize,
+            width=width,
+            figsize=each_figsize,
+            is_dark=is_dark,
+            xticks=xticks,
+            ylim=ylim,
+            ax=ax,
+            show=False,
+        )
     plt.show()
 
 
@@ -681,6 +701,7 @@ def plot_bar3d(
     y_pos: list[float],
     title: str,
     labels: list[str],
+    labelsize: int,
     width: float,
     figsize: int,
     is_dark: bool,
@@ -700,6 +721,8 @@ def plot_bar3d(
         title (str)  グラフのタイトル
 
         labels (list[str])  z軸方向に重ねていくもののラベル
+
+        labelsize (int)  ラベルのサイズ
 
         width (float)  barの幅
 
@@ -741,7 +764,7 @@ def plot_bar3d(
 
     if ax is None:
         fig = plt.figure(figsize=(figsize, figsize), facecolor="black" if is_dark else "white")
-        ax = fig.add_subplot(1,1,1, projection="3d")
+        ax = fig.add_subplot(1, 1, 1, projection="3d")
     ax.xaxis.set_major_formatter(mticker.FuncFormatter(default_formatter))
     ax.zaxis.set_major_formatter(mticker.FuncFormatter(default_formatter))
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(log_tick_formatter))
@@ -754,7 +777,7 @@ def plot_bar3d(
         _z_pos += dz
 
     color_proxies = [plt.Rectangle((0, 0), 1, 1, fc=color) for color in colors]
-    ax.legend(color_proxies, labels, fontsize=10)
+    ax.legend(color_proxies, labels, fontsize=labelsize)
 
     xticks = sorted(list(set(x_pos))) if xticks is None else xticks
     ax.set_xticks([xtick for xtick in xticks if xtick % 2 == 1])
@@ -927,5 +950,29 @@ def plots_population(
     plt.xlim(xlim)
     plt.ylim(ylim)
     scores_ordered_set = sorted([*set(scores)])
+    plt.xticks(scores_ordered_set)
+    plt.show()
+
+
+def plot_population_per_diff(ne: float, Te: float = 0.5, figsize: tuple[float] = None, labelsize: int = None, titlesize: int = None):
+    scores = None
+    states3 = csv_to_states_from_filename()
+    if figsize is not None:
+        plt.figure(figsize=figsize)
+    fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
+    scores_population_tpl = fermi.calc_population_per_diff()
+    scores_all = []
+    for i, (scores, population) in enumerate(scores_population_tpl):
+        scores_all += scores
+        plt.scatter(scores, population, label=f"diff {i+1}", s=2, alpha=1.0)
+    lgnd = plt.legend(loc="lower left", fontsize=labelsize)
+    lgnd.legendHandles[0].set_sizes([9.0])
+    lgnd.legendHandles[1].set_sizes([9.0])
+    plt.title(fr"diffごとの占有密度分布 ($n_e$ = {ne}, $T_e$ = {Te})", fontsize=titlesize)
+    plt.yscale("log")
+    # plt.ylabel("population [%] (log scale)")
+    plt.xlabel(r"状態 $i$ のエネルギー準位 $E_i$ $[\epsilon]$", fontsize=labelsize)
+    plt.ylabel(r"$P(E_i)$  ($\log$ scale)", fontsize=labelsize)
+    scores_ordered_set = sorted([*set(scores_all)])
     plt.xticks(scores_ordered_set)
     plt.show()
