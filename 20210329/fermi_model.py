@@ -93,6 +93,12 @@ class Fermi(object):
             x = y / np.linalg.norm(y)
             eigen_past = eigen
 
+    @staticmethod
+    def get_scores(states: list[State]) -> list[int]:
+        """重複なしの各エネルギーエネルギー準位を返す"""
+        scores_set = set([state.score for state in states])
+        return sorted(list(scores_set))
+
     def make_adj_matrix(self, sym: bool = False) -> None:
         """
         隣接行列を求める
@@ -502,15 +508,11 @@ def plot(scores, population, equ, Te, ne, type="plot"):
     plt.show()
 
 
-def plots_percentage_fluxes(
-    ne_lst: list[float],
-    Te: float = 0.5,
-    figsize: tuple[float] = (13, 4),
-) -> None:
-    states3 = csv_to_states_from_filename()
+def plots_percentage_fluxes(ne_lst: list[float], Te: float = 0.5, figsize: tuple[float] = (13, 4), num: int = 3) -> None:
+    states = csv_to_states_from_filename(f"states{num}.csv")
     for ne in ne_lst:
         fig = plt.figure(figsize=figsize)
-        fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
+        fermi = Fermi(states, equ=False, Te=Te, ne=ne)
         percentage_influx_dict, percentage_outflux_dict = fermi.calc_percentage_fluxes()
         percentage_influxes = np.array(list(percentage_influx_dict.values())).T
         subfig1 = fig.add_subplot(1, 2, 1)
