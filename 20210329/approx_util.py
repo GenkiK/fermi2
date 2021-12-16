@@ -39,6 +39,6 @@ def calc_approx_dist(scores: list[int], Te: float, ne: float) -> list[float]:
     return approx_dist
 
 
-def calc_approx_mean_dist(scores, Te: float, ne: float) -> NDArray[float64]:
+def calc_approx_mean_dist(scores: list[int], Te: float, ne: float) -> NDArray[float64]:
     approx_dist = calc_approx_dist(scores, Te, ne)
     return np.array(approx_dist) / np.array(calc_approx_degeneracies(scores))
