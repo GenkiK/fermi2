@@ -1,3 +1,4 @@
+from __future__ import annotations
 from fermi_model import *
 from typing import Callable
 
@@ -33,7 +34,7 @@ def calc_approx_dist(scores: list[int], Te: float, ne: float) -> list[float]:
     score_0 = scores[0]
     for score in scores[1:]:
         n = ne / Te ** 0.5 * np.exp(-(score - score_0) / Te)
-        n /= simpson(score_0, score, lambda x: approx_degeneracy_func(x, score_0))
+        n /= simpson(score_0, score, lambda x: approx_degeneracy_func(x, score_0) * (score - x) ** 3)
         approx_dist.append(n)
     approx_dist[0] = 1 - sum(approx_dist[1:])
     return approx_dist
@@ -42,3 +43,11 @@ def calc_approx_dist(scores: list[int], Te: float, ne: float) -> list[float]:
 def calc_approx_mean_dist(scores: list[int], Te: float, ne: float) -> NDArray[float64]:
     approx_dist = calc_approx_dist(scores, Te, ne)
     return np.array(approx_dist) / np.array(calc_approx_degeneracies(scores))
+
+
+def convert_eps2eV(val: float, t: float = 1.0) -> float:
+    return val * 400 * np.pi ** 2 * t / 3
+
+
+def convert_eV2eps(val: float, t: float = 1.0) -> float:
+    return val * 3 / (400 * np.pi ** 2 * t)
