@@ -61,7 +61,7 @@ public:
 
   bool increment(int idx)
   {
-    if (this->size() <= idx) 
+    if (this->size() <= idx)
     {
       cout << "State: idx(" << idx << ") is bigger than size(" << size() << ")" << endl;
       return false;
@@ -169,13 +169,13 @@ public:
     outputfile.close();
   }
 
-  void exportStatesCsv()
+  void exportStatesCsv(int lim_size)
   /**
    * Stateの一覧を、"score, v[0], v[1], ..., v[n-1]" という形で、cSV形式として出力する関数
    */
   {
     cout << "score, v[0], v[1], ..., v[n-1]" << endl;
-    ofstream outputfile("output/states" + to_string(n) + ".csv");
+    ofstream outputfile("output/states" + to_string(n) + "_" + to_string(lim_size) + ".csv");
     // header
     outputfile << "score";
     for (int i = 0; i < n; i++)
@@ -497,5 +497,6 @@ int main(int argc, char **argv)
   // f.exportStateList();
   // f.countPair();
   // f.makePair();
-  f.exportStatesCsv();
+  // f.exportStatesCsv();
+  f.exportStatesCsv(lim_size);
 }
