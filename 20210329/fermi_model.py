@@ -52,7 +52,17 @@ class Fermi(object):
     influx_labels: list[str] = ["基底状態からの衝突励起", "基底状態以外からの衝突励起", "衝突脱励起", "放射脱励起"]
     outflux_labels: list[str] = ["衝突励起", "衝突脱励起", "放射脱励起"]
 
-    def __init__(self, states: list[State], equ: bool = True, Te: float = 0.5, ne: float = 1e19, threshold: float = 1e-10, loop_assure: bool = False):
+    def __init__(
+        self,
+        states: list[State],
+        equ: bool = True,
+        Te: float = 0.5,
+        ne: float = 1e19,
+        threshold: float = 1e-9,
+        loop_lim: int = 10000,
+        loop_assure: bool = False,
+        gpu: bool = False,
+    ):
         self.states = states
         self.ne = ne
         self.Te = Te
@@ -63,7 +73,9 @@ class Fermi(object):
         self.deexcitation = np.zeros_like(self.adj)
         self.emission = np.zeros_like(self.adj)
         self.threshold = threshold
+        self.loop_lim = loop_lim
         self.loop_assure = loop_assure
+        self.gpu = gpu
         # 電子数10, ne=0.0001, Te=0.5のとき、thresholdを1e-10とすると、power_methodの計算時間は2m36s
 
     @staticmethod
@@ -77,29 +89,53 @@ class Fermi(object):
         return False
 
     @staticmethod
-    def power_method(matrix: NDArray[np.float64], eigen: float, threshold: float, loop_assure: bool = False) -> NDArray[np.float64]:
+    def power_method(
+        matrix: NDArray[np.float64], eigen: float, threshold: float, loop_lim: int, loop_assure: bool = False, gpu: bool = False
+    ) -> NDArray[np.float64]:
         """
         べき乗法により、最大の固有値に対応する固有ベクトルを求める
         """
-        # 初期化
-        x = np.zeros(matrix.shape[0])
-        x[0] = 1
-        cnt = 0
-        # 最低10万回はループさせる
-        if loop_assure:
-            while cnt < 100000:
-                if cnt % 10000 == 0:
-                    print(f"{cnt}回目")
+        if not gpu:
+            # 初期化
+            x = np.zeros(matrix.shape[0])
+            x[0] = 1
+            cnt = 0
+            # 最低10,000回はループさせる
+            if loop_assure:
+                while cnt < 10000:
+                    y = np.dot(matrix, x)
+                    cur_eigen = np.dot(y, y) / np.dot(y, x)
+                    x = y / np.linalg.norm(y)
+                    cnt += 1
+            while cnt < loop_lim:
                 y = np.dot(matrix, x)
                 cur_eigen = np.dot(y, y) / np.dot(y, x)
+                if np.abs(eigen - cur_eigen) < threshold:
+                    return x
                 x = y / np.linalg.norm(y)
-                cnt += 1
-        while True:
-            y = np.dot(matrix, x)
-            cur_eigen = np.dot(y, y) / np.dot(y, x)
-            if np.abs(eigen - cur_eigen) < threshold:
-                return x
-            x = y / np.linalg.norm(y)
+            return x
+        else:
+            import cupy as cp
+
+            matrix = cp.asarray(matrix)
+            # 初期化
+            x = cp.zeros(matrix.shape[0])
+            x[0] = 1
+            cnt = 0
+            # 最低10,000回はループさせる
+            if loop_assure:
+                while cnt < 10000:
+                    y = cp.dot(matrix, x)
+                    cur_eigen = cp.dot(y, y) / cp.dot(y, x)
+                    x = y / cp.linalg.norm(y)
+                    cnt += 1
+            while cnt < loop_lim:
+                y = cp.dot(matrix, x)
+                cur_eigen = cp.dot(y, y) / cp.dot(y, x)
+                if cp.abs(eigen - cur_eigen) < threshold:
+                    return cp.asnumpy(x)
+                x = y / cp.linalg.norm(y)
+            return cp.asnumpy(x)
 
     # @staticmethod
     # def power_method(matrix: NDArray[np.float64], threshold: float = 1e-15) -> NDArray[np.float64]:
@@ -124,6 +160,19 @@ class Fermi(object):
         """重複なしの各エネルギーエネルギー準位を返す"""
         scores_set = set([state.score for state in states])
         return sorted(list(scores_set))
+
+    @staticmethod
+    def get_adj_matrix(states):
+        """
+        隣接行列を求める
+        """
+        num_states = len(states)
+        adj = np.zeros((num_states, num_states))
+        for i in range(num_states):
+            for j in range(i + 1, num_states):
+                if Fermi.is_connected(states[i], states[j]):
+                    adj[i, j] = 1
+        return adj
 
     def make_adj_matrix(self, sym: bool = False) -> None:
         """
@@ -222,7 +271,9 @@ class Fermi(object):
         non_negative_matrix = -coeff + eigen * np.eye(C.shape[0])
         if use_power:
             # x = Fermi.power_method(non_negative_matrix, self.threshold)
-            x = Fermi.power_method(non_negative_matrix, eigen, self.threshold, self.loop_assure)
+            x = Fermi.power_method(
+                matrix=non_negative_matrix, eigen=eigen, threshold=self.threshold, loop_lim=self.loop_lim, loop_assure=self.loop_assure, gpu=self.gpu
+            )
         else:
             eigs, xs = np.linalg.eig(non_negative_matrix)
             x = np.abs(xs[:, np.argmax(eigs)])
@@ -492,6 +543,25 @@ class Fermi(object):
             population_each_diff[diff_idx].append(population[i])
         return scores_per_state_each_diff, population_each_diff, percentage_influx_per_state_each_diff
 
+    def calc_intensities(self) -> dict[float, list[float]]:
+        """
+        Return:
+            dict[float, list[float]]: dEをkey, Intensityを要素に持つ配列をvalueとした辞書
+        """
+        n = self._solve_equation()
+        intensities = self.emission * n
+        dE2I_dct = {}
+        # 行列を縦向きに走査
+        for j in range(self.num_states):
+            for i in range(0, j):
+                dE = self.states[j].score - self.states[i].score
+                if intensities[i][j] != 0:
+                    if dE2I_dct.get(dE):
+                        dE2I_dct[dE].append(intensities[i][j])
+                    else:
+                        dE2I_dct[dE] = [intensities[i][j]]
+        return dE2I_dct
+
 
 def csv_to_states(path: str = "./output/states3.csv") -> list[State]:
     """
@@ -536,11 +606,11 @@ def plot(scores, population, equ, Te, ne, type="plot"):
     plt.show()
 
 
-def plots_percentage_fluxes(ne_lst: list[float], Te: float = 0.5, figsize: tuple[float] = (13, 4), num: int = 3) -> None:
-    states = csv_to_states_from_filename(f"states{num}.csv")
+def plots_percentage_fluxes(ne_lst: list[float], Te: float = 0.5, figsize: tuple[float] = (13, 4), e_num: int = 3, loop_assure: bool = False) -> None:
+    states = csv_to_states_from_filename(f"states{e_num}.csv")
     for ne in ne_lst:
         fig = plt.figure(figsize=figsize)
-        fermi = Fermi(states, equ=False, Te=Te, ne=ne)
+        fermi = Fermi(states, equ=False, Te=Te, ne=ne, loop_assure=loop_assure)
         percentage_influx_dict, percentage_outflux_dict = fermi.calc_percentage_fluxes()
         percentage_influxes = np.array(list(percentage_influx_dict.values())).T
         subfig1 = fig.add_subplot(1, 2, 1)
@@ -552,7 +622,7 @@ def plots_percentage_fluxes(ne_lst: list[float], Te: float = 0.5, figsize: tuple
         )
         subfig1.set_xlabel("エネルギー準位 E")
         subfig1.set_ylabel("流入量の割合 [%]")
-        subfig1.set_title(f"influx (ne={ne},Te={Te})")
+        subfig1.set_title(f"influx (ne={ne},Te={Te},電子数={e_num})")
         subfig1.set_xticks(list(percentage_influx_dict.keys()))
         subfig1.set_xmargin(0)
         subfig1.set_ymargin(0)
@@ -568,7 +638,7 @@ def plots_percentage_fluxes(ne_lst: list[float], Te: float = 0.5, figsize: tuple
         )
         subfig2.set_xlabel("エネルギー準位 E")
         subfig2.set_ylabel("流出量の割合 [%]")
-        subfig2.set_title(f"outflux (ne={ne},Te={Te})")
+        subfig2.set_title(f"outflux (ne={ne},Te={Te}),電子数={e_num})")
         subfig2.set_xticks(list(percentage_outflux_dict.keys()))
         subfig2.set_xmargin(0)
         subfig2.set_ymargin(0)
@@ -869,8 +939,8 @@ def plots_dist(
 def plots_mean_dist(
     ne_lst: list[float],
     Te: float = 0.5,
-    include_equ: bool = False,
-    use_power: bool = True,
+    e_num: int = 3,
+    loop_assure: bool = False,
     xlim: tuple[float] = None,
     ylim: tuple[float] = None,
     figsize: tuple[float] = None,
@@ -880,23 +950,18 @@ def plots_mean_dist(
     """
     各neの値におけるフェルミガスモデルを構築し、総エネルギーを横軸、縮退状態について和をとり縮退度で平均した占有密度を縦軸logスケールでプロットする
     """
-    states3 = csv_to_states_from_filename()
+    states = csv_to_states_from_filename(f"states{e_num}.csv")
     scores = None
     if figsize is not None:
         plt.figure(figsize=figsize)
-    if include_equ:
-        ne = 1e20
-        fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
-        scores, distribution = fermi.calc_mean_distribution(use_power)
-        plt.plot(scores, distribution, label=fr"$n_e$={ne} (equilibrium)", marker=".", linewidth=1, ms=4)
     for ne in tqdm(ne_lst):
-        fermi = Fermi(states3, equ=False, Te=Te, ne=ne)
-        scores, distribution = fermi.calc_mean_distribution(use_power)
+        fermi = Fermi(states, equ=False, Te=Te, ne=ne, loop_assure=loop_assure)
+        scores, distribution = fermi.calc_mean_distribution()
         plt.plot(scores, distribution, label=fr"$n_e$={ne}", marker=".", linewidth=1, ms=4)
     # plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0, fontsize=labelsize)
     plt.legend(loc="lower left", fontsize=labelsize)
     plt.xticks(scores)
-    plt.title(fr"縮退度で平均した占有密度分布 ($T_e$ = {Te})", fontsize=titlesize)
+    plt.title(fr"縮退度で平均した占有密度分布 ($T_e$={Te}, 電子数={e_num})", fontsize=titlesize)
     plt.yscale("log")
     plt.xlabel(r"エネルギー準位 $E$ $[\epsilon]$", fontsize=labelsize)
     plt.ylabel(r"$P(E)$/縮退度  ($\log$ scale)", fontsize=labelsize)
@@ -996,7 +1061,7 @@ def plot_population_per_diff(
     lgnd = plt.legend(loc="lower left", fontsize=labelsize)
     lgnd.legendHandles[0].set_sizes([9.0])
     lgnd.legendHandles[1].set_sizes([9.0])
-    plt.title(fr"diffごとの占有密度分布 ($n_e$ = {ne}, $T_e$ = {Te})", fontsize=titlesize)
+    plt.title(fr"diffごとの占有密度分布 ($n_e$ = {ne}, $T_e$ = {Te}, 電子数 = {e_num})", fontsize=titlesize)
     plt.yscale("log")
     # plt.ylabel("population [%] (log scale)")
     plt.xlabel(r"状態 $i$ のエネルギー準位 $E_i$ $[\epsilon]$", fontsize=labelsize)
@@ -1006,7 +1071,9 @@ def plot_population_per_diff(
     plt.show()
 
 
-def plot_population_and_mean_distribution(ne: float, Te: float, loop_assure: bool = False, e_num: int = 3, figsize: tuple[int] = None):
+def plot_population_and_mean_distribution(
+    ne: float, Te: float, loop_assure: bool = False, e_num: int = 3, figsize: tuple[int] = None, ylim: tuple = None
+):
     states = csv_to_states_from_filename(f"states{e_num}.csv")
     if figsize is not None:
         plt.figure(figsize=figsize)
@@ -1031,10 +1098,12 @@ def plot_population_and_mean_distribution(ne: float, Te: float, loop_assure: boo
     dct[scores_per_state[-1]] /= degeneracy
     scores = np.fromiter(dct.keys(), dtype=int)
     mean_dist = np.fromiter(dct.values(), dtype=float)
-    plt.plot(scores, mean_dist, label="mean distribution", marker=".", linewidth=1, ms=4)
+    plt.plot(scores, mean_dist, label="mean distribution", marker=".", linewidth=1, ms=4, color="black")
     plt.legend(loc="lower left")
     plt.title(fr"占有密度分布 ($T_e$={Te}, $n_e$={ne}, 電子数={e_num})")
     plt.yscale("log")
+    if ylim is not None:
+        plt.ylim(ylim)
     plt.xlabel(r"状態 $i$ のエネルギー準位 $E_i$ $[\epsilon]$")
     plt.ylabel(r"$P(E_i)$  ($\log$ scale)")
     scores_ordered_set = sorted([*set(scores)])

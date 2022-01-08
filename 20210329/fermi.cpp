@@ -61,7 +61,7 @@ public:
 
   bool increment(int idx)
   {
-    if (this->size() <= idx)
+    if (this->size() <= idx) 
     {
       cout << "State: idx(" << idx << ") is bigger than size(" << size() << ")" << endl;
       return false;
