@@ -210,38 +210,6 @@ class Fermi(object):
                         # j→iの遷移
                         self.emission[i, j] = (self.states[j].score - self.states[i].score) ** 3
 
-    # def _solve_equation(self, use_power: bool = True) -> NDArray[np.float64]:
-    #     """
-    #     Xn = 0 の連立方程式を固有値問題とみなし、ペロン=フロベニウスの定理を利用して解を求める
-    #     """
-
-    #     # ndarray.sum(axis=0)では誤差が出てしまうので、その代用
-    #     def sum_along_axis(matrix: NDArray[np.float64], axis: int = 0):
-    #         return np.apply_along_axis(np.sum, axis, matrix)
-
-    #     if np.all(self.excitation == 0):
-    #         self._make_matrices()
-    #     C_ = np.diag(sum_along_axis(self.excitation, 1))
-    #     F_ = np.diag(sum_along_axis(self.deexcitation, 0))
-    #     C = self.excitation
-    #     F = self.deexcitation
-    #     coeff = C_ - F - C.T + F_
-    #     if not self.equ:
-    #         A_ = np.diag(sum_along_axis(self.emission, 0))
-    #         A = self.emission
-    #         coeff += A_ - A
-    #     self.coeff = coeff
-
-    #     # 対角成分の最大値で正規化し、正負を反転させることで、対角行列のみ負の行列を作成。さらにそこに単位行列を足すことで正行列を作成。
-    #     # ペロン=フロベニウスの定理を用いて、最大の固有値1に対応する固有ベクトルはすべて正の成分を持つことになる。
-    #     normalized = -coeff / np.max(np.abs(np.diag(coeff))) + np.eye(C.shape[0])
-    #     if use_power:
-    #         x = Fermi.power_method(normalized)
-    #     else:
-    #         eigs, xs = np.linalg.eig(normalized)
-    #         x = np.abs(xs[:, np.argmax(eigs)])
-    #     return x / np.sum(x)
-
     def _solve_equation(self, use_power: bool = True) -> NDArray[np.float64]:
         """
         Xn = 0 の連立方程式を固有値問題とみなし、ペロン=フロベニウスの定理を利用して解を求める。

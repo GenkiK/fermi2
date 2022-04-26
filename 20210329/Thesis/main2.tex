@@ -1,0 +1,86 @@
+%\documentclass[xelatex,a4paper]{bxjsarticle}
+\documentclass[a4paper]{bxjsreport}
+%\documentclass[xelatex,a4paper,precisetext,noautoxspacing]{bxjsbook}
+%
+%\usepackage{fontspec}
+%\usepackage{zxjatype}
+\usepackage{braket}
+%\usepackage{breqn}
+\usepackage[dvipdfmx]{graphicx,color}
+% \usepackage{xltxtra}
+%\setjamainfont{ipam.ttf}
+%\setjasansfont{ipag.ttf}
+%\setjamonofont{ipag.ttf}
+
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{bm}
+\usepackage{siunitx}
+% \usepackage{subfigure}
+\usepackage{floatrow}
+\usepackage{subfig}
+
+\renewcommand{\figurename}{図\ }
+\renewcommand{\abstractname}{摘要}
+% \usepackage[colorlinks=true, bookmarks=true,
+% bookmarksnumbered=true, bookmarkstype=toc, linkcolor=black,
+% urlcolor=black, citecolor=black]{hyperref}
+
+\usepackage{remreset}
+
+\makeatletter
+\@removefromreset{figure}{chapter}
+\def\thefigure{\arabic{figure}}
+\makeatother
+
+
+\usepackage{url}
+\usepackage{caption}
+% \captionsetup[figure]{format=plain, labelformat=simple, labelsep=quad, font=normalsize}
+% \captionsetup[figure]{labelsep=quad}
+% 図を最後に持ってくる
+% \usepackage[tablesfirst,nomarkers]{endfloat}
+\renewcommand{\efloatseparator}{\vspace{1cm}}
+
+\title{長焦点レンズを共軸に配置した高分解能分光器の開発}
+\author{今野淳}
+\date{2021年2月}
+
+\begin{document}
+
+\maketitle
+
+\include{abstract2}
+
+%% 目次
+\setcounter{tocdepth}{2}
+\tableofcontents
+% \listoffigures
+% \listoftables
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%  本文
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\include{introduction2}
+\include{spectrometer_principle}
+\include{basic_matters}
+% \include{optical_system}
+\include{spectrometer_design}
+\include{evaluation}
+% \include{result}
+\include{conclusion2}
+\include{acknowledgments}
+
+
+%% reference
+\renewcommand\refname{\vskip -1cm}
+% \footnotesize
+\bibliographystyle{junsrt}
+\bibliography{refs}
+
+
+
+% \include{figure}
+
+
+\end{document}

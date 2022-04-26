@@ -13,7 +13,7 @@ public:
   int score;     // 総エネルギー数
   int num;       // 電子の数
 
-  State(int n)
+  State(int n, int num_in_shell = 1)
   {
     v = vector<int>(n);
     score = 0;
@@ -21,18 +21,20 @@ public:
     for (int i = 0; i < n; i++)
     {
       v[i] = i;
-      score += i;
+      // score += i;
+      score += num_in_shell == 1 ? i : i/2;
     }
   }
 
-  State(vector<int> input)
+  State(vector<int> input, int num_in_shell = 1)
   {
     num = input.size();
     score = 0;
     v = input;
     for (int i = 0; i < num; i++)
     {
-      score += input[i];
+      // score += input[i];
+      score += num_in_shell == 1 ? input[i] : input[i]/2;
     }
   }
 
@@ -123,15 +125,16 @@ bool operator>=(const State &t1, const State &t2) { return !(t1 < t2); }
 
 class Fermi
 {
-  set<State> s;  // 各ステートを管理
-  int lim_score; // 総エネルギーの最大値
-  int n;         // 電子の数
+  set<State> s;     // 各ステートを管理
+  int lim_score;    // 総エネルギーの最大値
+  int n;            // 電子の数
+  int num_in_shell; // 電子殻に存在する電子数の数
 
 public:
-  Fermi(int n, int lim_size = 10)
+  Fermi(int n, int lim_size = 10, int num_in_shell = 1)
   {
     //O()
-    init(n, lim_size);
+    init(n, lim_size, num_in_shell);
   }
 
   Fermi()
@@ -186,6 +189,36 @@ public:
 
     for (auto state : s)
     {
+      outputfile << state.score << ", ";
+      for (int i = 0; i < state.size(); i++)
+      {
+        outputfile << state.v[i];
+        if (i == state.size()-1) outputfile << endl;
+        else outputfile << ", ";
+      }
+    }
+    outputfile.close();
+  }
+
+  void exportStatesConsideringSpinCsv(int lim_size)
+  /**
+   * Stateの一覧を、"score, v[0], v[1], ..., v[n-1]" という形で、cSV形式として出力する関数．
+   * スピンを考慮し，v[0]とv[1], v[2]とv[3], .... のエネルギーは等しくなる
+   */
+  {
+    cout << "score, v[0], v[1], ..., v[n-1] (considering spin)" << endl;
+    ofstream outputfile("output/states" + to_string(n) + "_" + to_string(lim_size) + "_spin.csv");
+    // header
+    outputfile << "score";
+    for (int i = 0; i < n; i++)
+    {
+      outputfile << ", v[" << to_string(i) << "]";
+    }
+    outputfile << endl;
+
+    for (auto state : s)
+    {
+      // outputfile << state.score / 2 << ", "; // これじゃダメ．{0, 1, 2, 3}としたとき，0+0+1+1=2が出力されてほしいけど，scoreの時点で0.5分が全部足されちゃってるので，3が出力される．
       outputfile << state.score << ", ";
       for (int i = 0; i < state.size(); i++)
       {
@@ -402,18 +435,18 @@ public:
   }
 
 private:
-  void init(int n, int lim_size = 10)
+  void init(int n, int lim_size = 10, int num_in_shell = 1)
   {
     this->n = n;
-    State state(n);
+    State state(n, num_in_shell);
     lim_score = state.score + lim_size;
-    init(state.v);
+    init(state.v, num_in_shell);
   }
 
   /// 深さ優先探索でステートを列挙
-  void init(const vector<int> &v)
+  void init(const vector<int> &v, int num_in_shell = 1)
   {
-    State state(v);
+    State state(v, num_in_shell);
     if (!array_is_unique(v))
       return;
     if (state.score > lim_score)
@@ -423,7 +456,7 @@ private:
       for (int i = 0; i < state.size(); i++)
       {
         state.increment(i);
-        init(state.v);
+        init(state.v, num_in_shell);
         state.decrement(i);
       }
     };
@@ -478,7 +511,7 @@ private:
 
 int main(int argc, char **argv)
 {
-  int n, lim_size;
+  int n, lim_size, num_in_shell;
   if (argc > 1)
   {
     n = atoi(argv[1]);
@@ -486,17 +519,23 @@ int main(int argc, char **argv)
   }
   else
   {
+    cout << "１つの電子殻に入る電子数を入力" << endl;
+    cin >> num_in_shell;
     cout << "粒子数nを入力" << endl;
     cin >> n;
     cout << "基底準位からのエネルギーの上がり幅lim_sizeを入力" << endl;
     cin >> lim_size;
   }
-  Fermi f(n, lim_size);
+  Fermi f(n, lim_size, num_in_shell);
   cout << endl;
   // f.secondPair();
   // f.exportStateList();
   // f.countPair();
   // f.makePair();
   // f.exportStatesCsv();
-  f.exportStatesCsv(lim_size);
+  if (num_in_shell == 1) {
+    f.exportStatesCsv(lim_size);
+  } else {
+    f.exportStatesConsideringSpinCsv(lim_size);
+  }
 }

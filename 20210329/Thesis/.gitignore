@@ -1,0 +1,30 @@
+# Ignore TeX temporaly files.
+*.aux
+*.dvi
+*.fdb_latexmk
+*.fls
+*.log
+*.gz
+*.bbl
+*.blg
+*.out
+*.fff
+*.fft
+*.lof
+*.lot
+*.toc
+*.ttt
+*Notes.bib
+main.pdf
+main2.pdf
+cover_letter.pdf
+main_supplemental.pdf
+reply_to_referees.pdf
+*.zip
+
+diff*.pdf
+# analysis directory
+notebook
+
+# proof reading
+ISJII_*
